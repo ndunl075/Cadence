@@ -108,8 +108,13 @@ function render(report) {
     cell.dataset.level = level(day[metric], max);
     cell.dataset.date = day.date;
     cell.dataset.value = day[metric];
-    cell.dataset.claude = day.providers.claude[metric];
-    cell.dataset.codex = day.providers.codex[metric];
+    const claude = day.providers.claude[metric];
+    const codex = day.providers.codex[metric];
+    cell.dataset.claude = claude;
+    cell.dataset.codex = codex;
+    // In the combined view, paint the day in whichever provider did more of it.
+    // Claude takes ties, which also covers Claude-only days.
+    if (day[metric] > 0) cell.dataset.owner = codex > claude ? 'codex' : 'claude';
     if (day.backfilled && day.signal > 0) cell.dataset.backfilled = '1';
     if (day.date === todayKey) cell.dataset.today = '1';
     // Stagger the load bloom by column so the grid fills left to right.
@@ -210,8 +215,14 @@ $('#grid').addEventListener('pointerover', (event) => {
   const cell = event.target.closest('.cell');
   if (!cell) return;
   const value = Number(cell.dataset.value);
+  // Emphasise the provider that owns the day, matching the cell's colour.
+  const owner = cell.dataset.owner;
+  const side = (key, cls, label) => {
+    const text = `<span class="${cls}">${label} ${compact.format(cell.dataset[key])}</span>`;
+    return owner === key ? `<b class="lead">${text}</b>` : text;
+  };
   const detail = state.provider === 'all'
-    ? `<span class="c">C ${compact.format(cell.dataset.claude)}</span> · <span class="x">X ${compact.format(cell.dataset.codex)}</span>`
+    ? `${side('claude', 'c', 'C')} · ${side('codex', 'x', 'X')}`
     : `${state.provider.toUpperCase()}`;
   const note = cell.dataset.backfilled
     ? `<i> · from stats cache${state.metric === 'tokens' ? ', no cache data' : ''}</i>`

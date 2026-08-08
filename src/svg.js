@@ -1,12 +1,13 @@
 'use strict';
 
 // Matches the widget, using each product's own design tokens: Anthropic's
-// --orange-750/-550/-450/-350 for Claude, and OpenAI's --blue-900/-400 into
-// --purple-400/-300 for Codex. Combined runs Codex blue up into Claude orange.
+// --orange-750/-550/-450/-350 for Claude, and OpenAI's --blue-900/-400 for
+// Codex. The `all` entry only supplies the empty-day colour — combined days are
+// painted from whichever provider's scale owns them.
 const PALETTES = {
   claude: ['#1d1712', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
-  codex: ['#141a24', '#00284d', '#0285ff', '#924ff7', '#ad7bf9'],
-  all: ['#171a21', '#00284d', '#0156a6', '#c25124', '#eb6834'],
+  codex: ['#141a24', '#00284d', '#0257a7', '#0285ff', '#70baff'],
+  all: ['#171a21', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
 };
 
 function escape(value) {
@@ -35,9 +36,17 @@ function renderSvg(report, options = {}) {
     const position = index + firstOffset;
     const x = left + Math.floor(position / 7) * (cell + gap);
     const y = top + (position % 7) * (cell + gap);
-    const fill = palette[level(day[metric], max)];
+    // Combined view paints each day in the colours of whichever provider did
+    // more of it, so the graph shows who as well as how much.
+    const step = level(day[metric], max);
+    let scale = palette;
+    if (report.provider === 'all' && step > 0) {
+      const claude = day.providers?.claude?.[metric] ?? 0;
+      const codex = day.providers?.codex?.[metric] ?? 0;
+      scale = codex > claude ? PALETTES.codex : PALETTES.claude;
+    }
     const note = day.backfilled && day.signal ? ' (from stats cache)' : '';
-    return `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}"><title>${escape(day.date)} · ${day[metric].toLocaleString()} tokens${note}</title></rect>`;
+    return `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${scale[step]}"><title>${escape(day.date)} · ${day[metric].toLocaleString()} tokens${note}</title></rect>`;
   }).join('');
   const legend = palette.map((color, index) => `<rect x="${width - 126 + index * 17}" y="${height - 28}" width="11" height="11" rx="2" fill="${color}"/>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escape(title)}">

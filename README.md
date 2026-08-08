@@ -10,7 +10,7 @@ Download `cadence.exe` and open it. The widget tucks into the top-left corner of
 
 - Frameless panel that stays on top, drag it anywhere by its header
 - Remembers its position, size, pinned state, metric, and provider between launches
-- Claude-only in burnt orange, Codex-only in electric blue, or both on one cold-to-hot ramp
+- Claude-only in Anthropic orange, Codex-only in Codex blue, or combined with each day coloured by whichever agent did more of it
 - Month labels and a full date range, with per-day figures on hover
 - A reference line that puts your total in human units — *~2,063 runs through the Harry Potter series*
 - Rescans local logs every minute; click the timestamp to rescan now
@@ -40,20 +40,27 @@ width, so a wider panel shows a larger graph rather than more empty space.
 Intensity is a log scale across five steps. The palettes are not approximations
 of each brand — they are the products' own design tokens:
 
-| View | Ramp | Source |
+| Provider | Ramp | Source |
 | --- | --- | --- |
 | **Claude** | `#4b1b08` → `#993d19` → `#c25124` → `#eb6834` | Anthropic `--orange-750/-550/-450/-350` |
-| **Codex** | `#00284d` → `#0285ff` → `#924ff7` → `#ad7bf9` | OpenAI `--blue-900/-400` into `--purple-400/-300` |
-| **Combined** | `#00284d` → `#0156a6` → `#c25124` → `#eb6834` | Codex blue climbing into Claude orange |
+| **Codex** | `#00284d` → `#0257a7` → `#0285ff` → `#70baff` | OpenAI `--blue-900` and `--blue-400`, two steps interpolated at the same hue |
 
 The Claude accent dot is `#d97757` — Anthropic's `--clay`, and the body colour
-of Clawd, the Claude Code mascot. The Codex ramp climbs out of blue into violet
-because that is the blue-purple pairing Codex uses for its own accents.
+of Clawd, the Claude Code mascot.
+
+**The combined view colours each day by who did the work.** A day where Codex
+ran more tokens than Claude is painted in Codex blue; a Claude-heavy day is
+painted in Anthropic orange. Intensity still encodes volume, so the graph tells
+you *how much* and *which agent* at the same time, and a stretch where you
+switched tools is visible at a glance. Ties go to Claude, which also covers
+Claude-only days. The legend shows both ramps in this view, one per provider,
+and the tooltip bolds whichever side led that day.
 
 Lightness increases strictly across every ramp, so a busier day is never darker
 than a quieter one. Peak days carry a soft glow in their own hue, and days
 backfilled from the stats cache get a hairline border so you can tell measured
-days from reconstructed ones. The SVG endpoint uses the same three palettes.
+days from reconstructed ones. The SVG endpoint applies the same per-day
+ownership rule.
 
 ## Two ways to count
 

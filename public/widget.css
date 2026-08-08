@@ -11,20 +11,19 @@
    * Claude — Anthropic's `--orange-*` scale and `--clay`, read out of the
    *          Claude Code binary. #d97757 is Clawd's own body colour, straight
    *          from the mascot's CLAWD_PAL sprite palette.
-   * Codex  — OpenAI's `--blue-*` and `--purple-*` design tokens, read out of
-   *          the Codex extension. Its ramp climbs from deep blue into violet,
-   *          which is the blue-purple Codex actually uses.
+   * Codex  — OpenAI's `--blue-*` design tokens, read out of the Codex
+   *          extension. blue-900 and blue-400 are exact; the two intermediate
+   *          steps are interpolated at the same hue so the ramp stays blue the
+   *          whole way up.
    */
   --claude: #d97757;  /* Anthropic --clay / CLAWD_PAL body */
   --codex: #0285ff;   /* Codex --blue-400 */
   --live: #5bdd93;
-  /* Combined runs cold to hot — Codex blue at the low end, Claude orange at the
-     top — so a heavy day is unmistakable at a glance. Step 2 sits between the
-     two Codex blues so lightness still climbs across all four steps; a brighter
-     blue there would make a level-2 day out-glow a level-3 one. */
+  /* Default ramp is Claude's; the combined view overrides it per cell to
+     whichever provider actually did the work that day. */
   --cell-0: #1a1e25;
-  --cell-1: #00284d;
-  --cell-2: #0156a6;
+  --cell-1: #4b1b08;
+  --cell-2: #993d19;
   --cell-3: #c25124;
   --cell-4: #eb6834;
   --glow: rgba(235, 104, 52, .6);
@@ -35,15 +34,27 @@
 
 /* Claude: Anthropic --orange-750 / -550 / -450 / -350, ending on the most
    saturated true orange in their scale. */
-body[data-provider="claude"] {
+.ramp-claude, body[data-provider="claude"] {
   --cell-1: #4b1b08; --cell-2: #993d19; --cell-3: #c25124; --cell-4: #eb6834;
   --glow: rgba(235, 104, 52, .65);
 }
-/* Codex: --blue-900 → --blue-400 → --purple-400 → --purple-300, the blue-into-
-   violet climb Codex uses for its own accents. */
-body[data-provider="codex"] {
-  --cell-1: #00284d; --cell-2: #0285ff; --cell-3: #924ff7; --cell-4: #ad7bf9;
-  --glow: rgba(173, 123, 249, .65);
+/* Codex: deep navy up to bright sky, all on Codex's own blue hue. */
+.ramp-codex, body[data-provider="codex"] {
+  --cell-1: #00284d; --cell-2: #0257a7; --cell-3: #0285ff; --cell-4: #70baff;
+  --glow: rgba(2, 133, 255, .6);
+}
+
+/* In the combined view a day is painted in the colours of whichever provider
+   did more of that day's work, so the graph shows *who* as well as *how much*.
+   Custom properties resolve per element, so re-declaring the ramp on the cell
+   is all it takes. */
+body[data-provider="all"] .cell[data-owner="claude"] {
+  --cell-1: #4b1b08; --cell-2: #993d19; --cell-3: #c25124; --cell-4: #eb6834;
+  --glow: rgba(235, 104, 52, .65);
+}
+body[data-provider="all"] .cell[data-owner="codex"] {
+  --cell-1: #00284d; --cell-2: #0257a7; --cell-3: #0285ff; --cell-4: #70baff;
+  --glow: rgba(2, 133, 255, .6);
 }
 
 * { box-sizing: border-box; }
@@ -232,14 +243,21 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
   padding: 7px 13px 8px 35px;
   color: #4b515b; font-size: 7px; letter-spacing: .1em; white-space: nowrap;
 }
-.legend { display: flex; align-items: center; gap: 3px; }
+.legend { display: flex; align-items: center; gap: 8px; }
+.ramp { display: flex; align-items: center; gap: 3px; }
 .legend i { width: 7px; height: 7px; border-radius: 1.5px; background: var(--cell-0); }
 .legend i[data-level="1"] { background: var(--cell-1); }
 .legend i[data-level="2"] { background: var(--cell-2); }
 .legend i[data-level="3"] { background: var(--cell-3); }
 .legend i[data-level="4"] { background: var(--cell-4); }
-.legend i:first-of-type { margin-left: 4px; }
-.legend i:last-of-type { margin-right: 4px; }
+.ramp-single i:first-of-type { margin-left: 4px; }
+.ramp-single i:last-of-type { margin-right: 4px; }
+/* One ramp when a single provider is selected; both when they are combined,
+   because a cell's colour then tells you which provider it belongs to. */
+.ramp-claude, .ramp-codex { display: none; }
+body[data-provider="all"] .ramp-single { display: none; }
+body[data-provider="all"] .ramp-claude,
+body[data-provider="all"] .ramp-codex { display: flex; }
 
 /* The reference line: the same number the readout shows, in units a person can
    actually picture. Click to cycle to a different yardstick. */
@@ -268,6 +286,7 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
   white-space: nowrap;
 }
 .tip b { display: block; font-size: 10px; letter-spacing: -.02em; }
+.tip b.lead { display: inline; font-size: inherit; letter-spacing: inherit; }
 .tip i { font-style: normal; color: #6a707c; }
 /* Same two hues, darkened for the light tooltip ground. */
 .tip .c { color: #a83f16; }

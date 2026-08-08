@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const readline = require('node:readline');
 
-const PROVIDERS = ['claude', 'codex'];
+const PROVIDERS = ['claude', 'codex', 'cursor'];
 const DAY = 86400000;
 
 function blankUsage() {
@@ -105,7 +105,7 @@ async function readLines(file, visit) {
 }
 
 function ensureDay(days, key) {
-  if (!days[key]) days[key] = { claude: blankUsage(), codex: blankUsage(), backfilled: false };
+  if (!days[key]) days[key] = { claude: blankUsage(), codex: blankUsage(), cursor: blankUsage(), backfilled: false };
   return days[key];
 }
 
@@ -158,6 +158,127 @@ async function parseCodexFile(file, days) {
 }
 
 /**
+ * Cursor keeps no transcript files. Its chat history lives in a VS Code style
+ * SQLite store, where each assistant turn is a row in `cursorDiskKV` keyed
+ * `bubbleId:<chat>:<turn>`, holding a JSON blob with `tokenCount` and
+ * `createdAt`. Rows whose count is zero are the user's own turns and the
+ * bookkeeping rows around them, so the query drops them at the database rather
+ * than parsing tens of thousands of blobs to find the ones that matter.
+ */
+const CURSOR_QUERY = `
+  SELECT key, value FROM cursorDiskKV
+  WHERE key LIKE 'bubbleId:%'
+    AND value LIKE '%"tokenCount":%'
+    AND value NOT LIKE '%"tokenCount":{"inputTokens":0,"outputTokens":0}%'
+`;
+
+let sqliteModule;
+
+/**
+ * `node:sqlite` is experimental on Node 22 and announces itself on stderr the
+ * first time it is loaded. Nobody asked Cadence for a SQLite warning, so it is
+ * swallowed here — and only that one. Older runtimes without the module simply
+ * lose the Cursor provider rather than failing the whole scan.
+ */
+function sqlite() {
+  if (sqliteModule !== undefined) return sqliteModule;
+  const emitWarning = process.emitWarning;
+  process.emitWarning = (warning, ...rest) => {
+    const type = typeof rest[0] === 'string' ? rest[0] : rest[0]?.type;
+    if (type === 'ExperimentalWarning' && /sqlite/i.test(String(warning))) return;
+    emitWarning.call(process, warning, ...rest);
+  };
+  try { sqliteModule = require('node:sqlite'); } catch { sqliteModule = null; } finally { process.emitWarning = emitWarning; }
+  return sqliteModule;
+}
+
+/**
+ * Cursor's store grows into the gigabytes and the scan has to read every chat
+ * blob, so the extracted rows are kept and only recomputed when the file (or
+ * the write-ahead log beside it, which is where a running Cursor puts recent
+ * turns) actually changes.
+ */
+const cursorCache = new Map();
+
+function fileSignature(file) {
+  const stamp = (candidate) => {
+    try {
+      const stats = fs.statSync(candidate);
+      return `${stats.mtimeMs}:${stats.size}`;
+    } catch { return '-'; }
+  };
+  return `${stamp(file)}|${stamp(`${file}-wal`)}`;
+}
+
+/**
+ * Read a store into flat per-turn records. Kept synchronous: the warning patch
+ * above is process-wide, so nothing else may run while it is installed.
+ */
+function readCursorStore(file) {
+  const signature = fileSignature(file);
+  const cached = cursorCache.get(file);
+  if (cached && cached.signature === signature) return cached.records;
+
+  const records = [];
+  const runtime = sqlite();
+  if (runtime) {
+    let db = null;
+    try {
+      db = new runtime.DatabaseSync(file, { readOnly: true });
+      for (const row of db.prepare(CURSOR_QUERY).all()) {
+        const text = String(row.value);
+        const counts = /"tokenCount":\{"inputTokens":(\d+),"outputTokens":(\d+)\}/.exec(text);
+        const created = /"createdAt":"([^"]+)"/.exec(text);
+        if (!counts || !created) continue;
+        records.push({
+          // usageUuid is the server's id for the turn, so the same turn seen in
+          // two stores (a second Cursor install, a restored profile) counts once.
+          id: /"usageUuid":"([^"]+)"/.exec(text)?.[1] || String(row.key),
+          chat: String(row.key).split(':')[1] || '',
+          timestamp: created[1],
+          input: Number(counts[1]),
+          output: Number(counts[2]),
+        });
+      }
+    } catch {
+      // A store locked by a running Cursor, or one written by a newer schema,
+      // costs us Cursor's rows and nothing else.
+    } finally {
+      try { db?.close(); } catch { /* already gone */ }
+    }
+  }
+  cursorCache.set(file, { signature, records });
+  return records;
+}
+
+/**
+ * Cursor reports no cache breakdown at all — just input and output — and its
+ * input is the whole prompt for the turn, context included. There is nothing to
+ * subtract, so unlike Codex it cannot be put on the same cache-free footing as
+ * Claude, and a Cursor day reads high against a Claude day. Counted as
+ * reported, and said plainly in the README rather than silently scaled.
+ */
+function parseCursorStore(file, days, seen, chats) {
+  const chatDays = new Set();
+  for (const record of readCursorStore(file)) {
+    if (seen.has(record.id)) continue;
+    seen.add(record.id);
+    const day = dateKey(record.timestamp);
+    if (!day) continue;
+    const usage = blankUsage();
+    usage.input = record.input;
+    usage.output = record.output;
+    usage.signal = record.input + record.output;
+    usage.tokens = usage.signal;
+    usage.messages = 1;
+    add(ensureDay(days, day).cursor, usage);
+    chats.add(record.chat);
+    chatDays.add(`${day}:${record.chat}`);
+  }
+  for (const entry of chatDays) ensureDay(days, entry.slice(0, 10)).cursor.sessions += 1;
+}
+
+/**
  * Claude Code prunes old transcripts but keeps a rolling aggregate in
  * stats-cache.json. That file records input + output only (no cache tokens),
  * which is exactly the `signal` metric, so its days slot in beside transcript
@@ -191,7 +312,7 @@ async function parseClaudeStatsCache(file, days) {
 }
 
 function mergeProvider(day) {
-  return add(add(blankUsage(), day.claude), day.codex);
+  return add(add(add(blankUsage(), day.claude), day.codex), day.cursor);
 }
 
 function streaks(rows) {
@@ -232,10 +353,10 @@ function resolveRange(days, options = {}) {
     start = new Date(end - (options.weeks * 7 - 1) * DAY);
   } else {
     explicit = false;
-    const recorded = Object.keys(days).filter((key) => {
-      const day = days[key];
-      return day.claude.signal > 0 || day.codex.signal > 0 || day.claude.tokens > 0 || day.codex.tokens > 0;
-    }).sort();
+    const recorded = Object.keys(days).filter((key) => PROVIDERS.some((name) => {
+      const usage = days[key][name];
+      return usage && (usage.signal > 0 || usage.tokens > 0);
+    })).sort();
     start = recorded.length ? noon(recorded[0]) : new Date(end - (minWeeks * 7 - 1) * DAY);
   }
   const floor = new Date(end - (minWeeks * 7 - 1) * DAY);
@@ -254,9 +375,11 @@ function summarize(days, provider = 'all', options = {}) {
   let backfilledDays = 0;
   for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
     const key = dateKey(cursor);
-    const raw = days[key] || { claude: blankUsage(), codex: blankUsage(), backfilled: false };
+    const raw = days[key] || { claude: blankUsage(), codex: blankUsage(), cursor: blankUsage(), backfilled: false };
     const value = provider === 'all' ? mergeProvider(raw) : raw[provider];
-    const backfilled = Boolean(raw.backfilled) && provider !== 'codex';
+    // Only Claude has a stats cache to be backfilled from, so the marker is
+    // meaningless on the other providers' own views.
+    const backfilled = Boolean(raw.backfilled) && (provider === 'all' || provider === 'claude');
     const row = {
       date: key,
       ...value,
@@ -265,6 +388,7 @@ function summarize(days, provider = 'all', options = {}) {
       providers: {
         claude: { signal: raw.claude.signal, tokens: raw.claude.tokens },
         codex: { signal: raw.codex.signal, tokens: raw.codex.tokens },
+        cursor: { signal: raw.cursor.signal, tokens: raw.cursor.tokens },
       },
     };
     daily.push(row);
@@ -318,6 +442,24 @@ function codexRoots(home, env) {
   return roots;
 }
 
+/**
+ * Cursor is an Electron editor, so its store sits where VS Code would keep one:
+ * under the OS application-data directory, not in the home dot-directory that
+ * holds its extensions and projects. `CURSOR_HOME` overrides the parent of
+ * `User/`, matching how CODEX_HOME works.
+ */
+function cursorStores(home, env) {
+  const store = (base) => path.join(base, 'User', 'globalStorage', 'state.vscdb');
+  const stores = configDirs(env.CURSOR_HOME).map(store);
+  if (process.platform === 'win32') {
+    stores.push(store(path.join(env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Cursor')));
+  } else if (process.platform === 'darwin') {
+    stores.push(store(path.join(home, 'Library', 'Application Support', 'Cursor')));
+  }
+  stores.push(store(path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'Cursor')));
+  return stores;
+}
+
 function claudeStatsCaches(home, env) {
   const files = configDirs(env.CLAUDE_CONFIG_DIR).map((dir) => path.join(dir, 'stats-cache.json'));
   files.push(path.join(home, '.claude', 'stats-cache.json'));
@@ -347,6 +489,7 @@ async function collect(options = {}) {
   const roots = {
     claude: unique(options.claudeRoots || claudeRoots(home, env)),
     codex: unique(options.codexRoots || codexRoots(home, env)),
+    cursor: unique(options.cursorStores || cursorStores(home, env)),
   };
   const statsCaches = unique(options.statsCaches || claudeStatsCaches(home, env));
   const days = {};
@@ -359,10 +502,17 @@ async function collect(options = {}) {
     ...files.claude.map((file) => parseClaudeFile(file, days)),
     ...files.codex.map((file) => parseCodexFile(file, days)),
   ]);
+  // Cursor keeps one store rather than a file per session, so its count is
+  // chats rather than files — the useful number when checking it was found.
+  const seenTurns = new Set();
+  const chats = new Set();
+  for (const store of roots.cursor) {
+    if (fs.existsSync(store)) parseCursorStore(store, days, seenTurns, chats);
+  }
   // Backfill runs last so it can defer to any day the transcripts already proved.
   let backfilled = 0;
   for (const cache of statsCaches) backfilled += await parseClaudeStatsCache(cache, days);
-  return { days, files: { claude: files.claude.length, codex: files.codex.length, backfilled }, roots };
+  return { days, files: { claude: files.claude.length, codex: files.codex.length, cursor: chats.size, backfilled }, roots };
 }
 
-module.exports = { blankUsage, claudeRoots, claudeStatsCaches, codexRoots, collect, dateKey, resolveRange, summarize, tokenUsage, PROVIDERS };
+module.exports = { blankUsage, claudeRoots, claudeStatsCaches, codexRoots, collect, cursorStores, dateKey, resolveRange, summarize, tokenUsage, PROVIDERS };

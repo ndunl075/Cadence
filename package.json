@@ -6,15 +6,17 @@
   "private": true,
   "main": "electron/main.js",
   "bin": {
+    "cadence": "src/cli.js",
     "cadence-server": "src/server.js"
   },
   "scripts": {
     "start": "electron .",
+    "graph": "node src/cli.js",
     "server": "node src/server.js --no-open",
     "export": "node src/server.js --export ./out",
     "test": "node --test",
     "build:icon": "node scripts/build-icon.mjs",
-    "build:exe": "npm run build:icon && electron-builder --win portable"
+    "build:exe": "npm run build:icon && electron-builder --win portable zip"
   },
   "build": {
     "appId": "dev.cadence.widget",
@@ -31,9 +33,16 @@
     ],
     "win": {
       "icon": "assets/cadence.ico",
+      "artifactName": "cadence-win-x64.${ext}",
       "target": [
         {
           "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64"
           ]

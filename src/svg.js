@@ -2,13 +2,29 @@
 
 // Matches the widget, using each product's own design tokens: Anthropic's
 // --orange-750/-550/-450/-350 for Claude, and OpenAI's --blue-900/-400 for
-// Codex. The `all` entry only supplies the empty-day colour — combined days are
-// painted from whichever provider's scale owns them.
+// Codex. Cursor publishes no colour scale — its mark is monochrome — so it gets
+// a neutral grey ramp cut to the same four steps. The `all` entry only supplies
+// the empty-day colour: combined days are painted from whichever provider's
+// scale owns them.
 const PALETTES = {
   claude: ['#1d1712', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
   codex: ['#141a24', '#00284d', '#0257a7', '#0285ff', '#70baff'],
+  cursor: ['#17181a', '#3f434a', '#6a707a', '#9aa1ac', '#d8dee6'],
   all: ['#171a21', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
 };
+
+/**
+ * Which provider a combined-view day belongs to: whoever ran the most tokens
+ * that day. Ties go to Claude, which also covers Claude-only days.
+ */
+function owner(day, metric) {
+  const claude = day.providers?.claude?.[metric] ?? 0;
+  const codex = day.providers?.codex?.[metric] ?? 0;
+  const cursor = day.providers?.cursor?.[metric] ?? 0;
+  if (codex > claude && codex >= cursor) return 'codex';
+  if (cursor > claude && cursor > codex) return 'cursor';
+  return 'claude';
+}
 
 function escape(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -21,7 +37,7 @@ function level(value, max) {
 
 function renderSvg(report, options = {}) {
   const palette = PALETTES[report.provider] || PALETTES.all;
-  const title = options.title || `${report.provider === 'all' ? 'Claude + Codex' : report.provider[0].toUpperCase() + report.provider.slice(1)} cadence`;
+  const title = options.title || `${report.provider === 'all' ? 'Claude + Codex + Cursor' : report.provider[0].toUpperCase() + report.provider.slice(1)} cadence`;
   const cell = 11;
   const gap = 3;
   const left = 45;
@@ -39,12 +55,7 @@ function renderSvg(report, options = {}) {
     // Combined view paints each day in the colours of whichever provider did
     // more of it, so the graph shows who as well as how much.
     const step = level(day[metric], max);
-    let scale = palette;
-    if (report.provider === 'all' && step > 0) {
-      const claude = day.providers?.claude?.[metric] ?? 0;
-      const codex = day.providers?.codex?.[metric] ?? 0;
-      scale = codex > claude ? PALETTES.codex : PALETTES.claude;
-    }
+    const scale = report.provider === 'all' && step > 0 ? PALETTES[owner(day, metric)] : palette;
     const note = day.backfilled && day.signal ? ' (from stats cache)' : '';
     return `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${scale[step]}"><title>${escape(day.date)} · ${day[metric].toLocaleString()} tokens${note}</title></rect>`;
   }).join('');
@@ -61,4 +72,4 @@ function renderSvg(report, options = {}) {
 </svg>`;
 }
 
-module.exports = { PALETTES, renderSvg };
+module.exports = { PALETTES, level, owner, renderSvg };

@@ -25,5 +25,9 @@ jobs:
       - run: npm run build:exe
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          files: dist/cadence.exe
+          # The portable exe is the widget download; the zip is the same app as
+          # a plain folder, for anyone who wants the command line to pipe.
+          files: |
+            dist/cadence.exe
+            dist/cadence-win-x64.zip
           generate_release_notes: true

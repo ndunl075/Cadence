@@ -5,6 +5,16 @@ const path = require('node:path');
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } = require('electron');
 const { collect, summarize, PROVIDERS } = require('../src/usage');
 const { comparisons } = require('../src/comparisons');
+const { isCliInvocation, run: runCli } = require('../src/cli');
+
+/**
+ * The same binary answers `cadence.exe graph` as answers a double-click, so the
+ * download does not need a separate CLI. `electron .` puts the script path at
+ * argv[1] and a packaged build does not, which `process.defaultApp` is how you
+ * tell apart.
+ */
+const cliArgs = process.defaultApp ? process.argv.slice(2) : process.argv.slice(1);
+const cliMode = isCliInvocation(cliArgs);
 
 const THEMES = ['system', 'light', 'dark'];
 // Offered as a fixed set rather than a free number so the renderer cannot ask
@@ -41,7 +51,9 @@ function writeState(patch) {
  */
 function normalizeSettings(saved) {
   return {
-    theme: THEMES.includes(saved.theme) ? saved.theme : 'system',
+    // Dark by default: the panel is a floating instrument on a desktop, not a
+    // document, and its ramps were cut against the dark bezel first.
+    theme: THEMES.includes(saved.theme) ? saved.theme : 'dark',
     scanSeconds: SCAN_SECONDS.includes(saved.scanSeconds) ? saved.scanSeconds : 60,
     launchAtLogin: saved.launchAtLogin === true,
     rotateComparisons: saved.rotateComparisons !== false,
@@ -261,7 +273,27 @@ ipcMain.on('cadence:close', () => {
 
 ipcMain.on('cadence:minimize', () => widget && widget.minimize());
 
-if (!app.requestSingleInstanceLock()) {
+/**
+ * Draw the graph and leave. This runs before the single-instance lock, so
+ * asking a running widget's own executable for a graph prints one instead of
+ * being bounced as a second instance — and before any window exists, so nothing
+ * flashes on screen. Chromium never reaches `whenReady`, so the exit has to be
+ * explicit, and stdout is flushed first because a piped write is asynchronous.
+ */
+async function cli() {
+  let code = 1;
+  try {
+    code = await runCli(cliArgs);
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+  }
+  await new Promise((resolve) => process.stdout.write('', resolve));
+  app.exit(code);
+}
+
+if (cliMode) {
+  cli();
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {

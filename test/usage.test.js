@@ -47,14 +47,14 @@ test('deduplicates Claude message snapshots and differences Codex cumulative tot
     { type: 'event_msg', timestamp: '2026-01-02T13:01:00Z', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 150, output_tokens: 30, total_tokens: 180 } } } },
   ].map(JSON.stringify).join('\n'));
 
-  const result = await collect({ claudeRoots: [claude], codexRoots: [codex], statsCaches: [] });
+  const result = await collect({ claudeRoots: [claude], codexRoots: [codex], statsCaches: [], cursorStores: [] });
   const report = summarize(result.days, 'all', { year: 2026 });
   const day = report.daily.find((item) => item.date === '2026-01-02');
   assert.equal(day.providers.claude.signal, 22);
   assert.equal(day.providers.codex.signal, 180);
   assert.equal(day.signal, 202);
   assert.equal(day.providers.codex.tokens, 180, 'both metrics ride along per provider');
-  assert.deepEqual(result.files, { claude: 1, codex: 1, backfilled: 0 });
+  assert.deepEqual(result.files, { claude: 1, codex: 1, cursor: 0, backfilled: 0 });
 });
 
 test('backfills pruned days from the Claude stats cache without overwriting transcripts', async () => {
@@ -71,7 +71,7 @@ test('backfills pruned days from the Claude stats cache without overwriting tran
     ],
   }));
 
-  const result = await collect({ claudeRoots: [claude], codexRoots: [codex], statsCaches: [cache] });
+  const result = await collect({ claudeRoots: [claude], codexRoots: [codex], statsCaches: [cache], cursorStores: [] });
   assert.equal(result.files.backfilled, 1, 'only the day transcripts do not cover is backfilled');
   assert.equal(result.days['2025-11-04'].claude.signal, 1000);
   assert.equal(result.days['2025-11-04'].claude.sessions, 2);
@@ -80,10 +80,83 @@ test('backfills pruned days from the Claude stats cache without overwriting tran
   assert.equal(result.days['2026-01-02'].backfilled, false);
 });
 
+/**
+ * Cursor has no transcript files: its turns live in a VS Code style SQLite
+ * store, so the fixture has to be a real database rather than a text file.
+ */
+async function cursorStore(rows) {
+  const { DatabaseSync } = require('node:sqlite');
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cadence-cursor-'));
+  const file = path.join(root, 'state.vscdb');
+  const db = new DatabaseSync(file);
+  db.exec('CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)');
+  const insert = db.prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)');
+  for (const [key, value] of rows) insert.run(key, typeof value === 'string' ? value : JSON.stringify(value));
+  db.close();
+  return file;
+}
+
+const bubble = (createdAt, inputTokens, outputTokens, usageUuid) => ({
+  type: 2, createdAt, usageUuid, tokenCount: { inputTokens, outputTokens }, text: 'never read',
+});
+
+test('reads Cursor turns out of its composer store', async () => {
+  const store = await cursorStore([
+    ['bubbleId:chat-a:turn-1', bubble('2026-01-05T10:00:00Z', 1000, 200, 'u1')],
+    ['bubbleId:chat-a:turn-2', bubble('2026-01-05T11:00:00Z', 500, 50, 'u2')],
+    ['bubbleId:chat-b:turn-1', bubble('2026-01-06T09:00:00Z', 300, 30, 'u3')],
+    // A user turn: no tokens of its own, and must not count as activity.
+    ['bubbleId:chat-b:turn-0', bubble('2026-01-06T08:59:00Z', 0, 0, 'u4')],
+    // Not a chat turn at all.
+    ['composerData:chat-b', { tokenCount: { inputTokens: 99999, outputTokens: 1 } }],
+  ]);
+
+  const result = await collect({ claudeRoots: [], codexRoots: [], statsCaches: [], cursorStores: [store] });
+  assert.equal(result.files.cursor, 2, 'two chats found');
+  const first = result.days[dateKey('2026-01-05T10:00:00Z')].cursor;
+  assert.equal(first.signal, 1750);
+  assert.equal(first.tokens, 1750, 'Cursor reports no cache figures, so both metrics agree');
+  assert.equal(first.messages, 2);
+  assert.equal(first.sessions, 1);
+  assert.equal(result.days[dateKey('2026-01-06T09:00:00Z')].cursor.signal, 330);
+});
+
+test('counts a Cursor turn once even when two stores hold it', async () => {
+  const rows = [['bubbleId:chat-a:turn-1', bubble('2026-01-05T10:00:00Z', 1000, 200, 'shared-turn')]];
+  const [first, second] = [await cursorStore(rows), await cursorStore(rows)];
+  const result = await collect({ claudeRoots: [], codexRoots: [], statsCaches: [], cursorStores: [first, second] });
+  assert.equal(result.days[dateKey('2026-01-05T10:00:00Z')].cursor.signal, 1200, 'the same turn is not counted twice');
+});
+
+test('a store it cannot read costs Cursor only', async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cadence-cursor-'));
+  const store = path.join(root, 'state.vscdb');
+  await fs.promises.writeFile(store, 'this is not a database');
+  const claude = path.join(root, 'claude');
+  await fs.promises.mkdir(claude);
+  await fs.promises.writeFile(path.join(claude, 's.jsonl'), JSON.stringify(
+    { type: 'assistant', timestamp: '2026-01-05T12:00:00Z', message: { id: 'm1', usage: { input_tokens: 7, output_tokens: 3 } } },
+  ));
+
+  const result = await collect({ claudeRoots: [claude], codexRoots: [], statsCaches: [], cursorStores: [store] });
+  assert.equal(result.files.cursor, 0);
+  assert.equal(result.days['2026-01-05'].claude.signal, 10, 'the other providers still report');
+});
+
+test('the combined view hands each day to whichever provider ran the most', () => {
+  const { owner } = require('../src/svg');
+  const day = (claude, codex, cursor) => ({ providers: { claude: { signal: claude }, codex: { signal: codex }, cursor: { signal: cursor } } });
+  assert.equal(owner(day(10, 5, 3), 'signal'), 'claude');
+  assert.equal(owner(day(1, 50, 3), 'signal'), 'codex');
+  assert.equal(owner(day(1, 5, 30), 'signal'), 'cursor');
+  assert.equal(owner(day(9, 9, 9), 'signal'), 'claude', 'ties go to Claude');
+  assert.equal(owner(day(0, 0, 0), 'signal'), 'claude', 'an empty day needs no ramp');
+});
+
 test('spans the full recorded history rather than one calendar year', () => {
   const days = {
-    '2025-11-04': { claude: { ...blank(), signal: 1000, tokens: 1000 }, codex: blank(), backfilled: true },
-    '2026-03-09': { claude: { ...blank(), signal: 20, tokens: 20 }, codex: blank(), backfilled: false },
+    '2025-11-04': { claude: { ...blank(), signal: 1000, tokens: 1000 }, codex: blank(), cursor: blank(), backfilled: true },
+    '2026-03-09': { claude: { ...blank(), signal: 20, tokens: 20 }, codex: blank(), cursor: blank(), backfilled: false },
   };
   const report = summarize(days, 'claude', { today: '2026-03-09' });
   assert.equal(report.range.to, '2026-03-09');
@@ -94,7 +167,7 @@ test('spans the full recorded history rather than one calendar year', () => {
 });
 
 test('pads a short history out to a full-looking grid', () => {
-  const days = { '2026-03-08': { claude: { ...blank(), signal: 5, tokens: 5 }, codex: blank(), backfilled: false } };
+  const days = { '2026-03-08': { claude: { ...blank(), signal: 5, tokens: 5 }, codex: blank(), cursor: blank(), backfilled: false } };
   const report = summarize(days, 'claude', { today: '2026-03-09', minWeeks: 26 });
   assert.ok(report.daily.length >= 26 * 7, `expected at least 26 weeks, got ${report.daily.length} days`);
 });
@@ -102,9 +175,9 @@ test('pads a short history out to a full-looking grid', () => {
 test('computes the longest active streak', () => {
   const value = { ...blank(), input: 1, signal: 1, tokens: 1, messages: 1, sessions: 1 };
   const days = {
-    '2026-02-01': { claude: value, codex: blank(), backfilled: false },
-    '2026-02-02': { claude: value, codex: blank(), backfilled: false },
-    '2026-02-04': { claude: value, codex: blank(), backfilled: false },
+    '2026-02-01': { claude: value, codex: blank(), cursor: blank(), backfilled: false },
+    '2026-02-02': { claude: value, codex: blank(), cursor: blank(), backfilled: false },
+    '2026-02-04': { claude: value, codex: blank(), cursor: blank(), backfilled: false },
   };
   assert.equal(summarize(days, 'claude', { year: 2026 }).longestStreak, 2);
 });

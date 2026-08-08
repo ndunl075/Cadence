@@ -17,6 +17,7 @@
    */
   --claude: #d97757;  /* Anthropic --clay / CLAWD_PAL body */
   --codex: #0285ff;   /* Codex --blue-400 */
+  --cursor: #b6bcc5;  /* Cursor's mark is monochrome, so its accent is a grey */
   /* Claude: Anthropic --orange-750 / -550 / -450 / -350, ending on the most
      saturated true orange in their scale. */
   --claude-1: #4b1b08; --claude-2: #993d19; --claude-3: #c25124; --claude-4: #eb6834;
@@ -24,6 +25,10 @@
   /* Codex: deep navy up to bright sky, all on Codex's own blue hue. */
   --codex-1: #00284d; --codex-2: #0257a7; --codex-3: #0285ff; --codex-4: #70baff;
   --codex-glow: rgba(2, 133, 255, .6);
+  /* Cursor: slate up to near-white. The one ramp with no hue to carry it, so
+     the steps are spaced on lightness alone and end brighter than the others. */
+  --cursor-1: #3f434a; --cursor-2: #6a707a; --cursor-3: #9aa1ac; --cursor-4: #d8dee6;
+  --cursor-glow: rgba(216, 222, 230, .5);
 
   --ink: #f0eee9;
   --ink-soft: #b9bfc9;
@@ -55,12 +60,14 @@
   --tip-muted: #6a707c;
   --tip-claude: #a83f16;
   --tip-codex: #5b21c9;
+  --tip-cursor: #4c5361;
 
   --cell-0: #1a1e25;
   --bezel-shadow: 0 22px 48px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .35);
   --bezel-lip: rgba(255, 255, 255, .05);
   --wash-claude: rgba(217, 119, 87, .14);
   --wash-codex: rgba(2, 133, 255, .12);
+  --wash-cursor: rgba(182, 188, 197, .07);
 
   /* Default ramp is Claude's; the combined view overrides it per cell to
      whichever provider actually did the work that day. */
@@ -83,6 +90,10 @@
   --claude-glow: rgba(184, 73, 27, .3);
   --codex-1: #d3e6ff; --codex-2: #8ec1ff; --codex-3: #2f92f5; --codex-4: #0058b0;
   --codex-glow: rgba(0, 88, 176, .26);
+  /* Cursor's grey runs the other way on paper: pale slate down to near-black,
+     so a busy day is the heaviest mark rather than the lightest. */
+  --cursor-1: #dcdfe4; --cursor-2: #aab1bb; --cursor-3: #6f7783; --cursor-4: #333a45;
+  --cursor-glow: rgba(51, 58, 69, .26);
 
   --ink: #16191e;
   --ink-soft: #3f4650;
@@ -114,12 +125,14 @@
   --tip-muted: #98a0ac;
   --tip-claude: #f0a583;
   --tip-codex: #8cc2ff;
+  --tip-cursor: #c3cad4;
 
   --cell-0: #ded8cc;
   --bezel-shadow: 0 18px 40px rgba(58, 48, 38, .18), 0 2px 6px rgba(58, 48, 38, .12);
   --bezel-lip: rgba(255, 255, 255, .85);
   --wash-claude: rgba(217, 119, 87, .16);
   --wash-codex: rgba(2, 133, 255, .1);
+  --wash-cursor: rgba(51, 58, 69, .06);
 }
 
 .ramp-claude,
@@ -139,6 +152,13 @@ body[data-provider="all"] .cell[data-owner="codex"] {
   --cell-1: var(--codex-1); --cell-2: var(--codex-2);
   --cell-3: var(--codex-3); --cell-4: var(--codex-4);
   --glow: var(--codex-glow);
+}
+.ramp-cursor,
+body[data-provider="cursor"],
+body[data-provider="all"] .cell[data-owner="cursor"] {
+  --cell-1: var(--cursor-1); --cell-2: var(--cursor-2);
+  --cell-3: var(--cursor-3); --cell-4: var(--cursor-4);
+  --glow: var(--cursor-glow);
 }
 
 * { box-sizing: border-box; }
@@ -165,12 +185,18 @@ html, body {
   height: 100%;
   display: grid;
   grid-template-rows: auto auto 1fr auto auto auto;
+  /* minmax(0, 1fr), not the implicit `auto`: an auto column is sized to the
+     widest row's min-content, so a long history would widen the whole panel
+     past the window and the close button would be clipped off the right edge.
+     The graph is the row that scrolls; every other row must fit. */
+  grid-template-columns: minmax(0, 1fr);
   border-radius: 12px;
   border: 1px solid var(--line);
   background:
     linear-gradient(180deg, var(--panel-top), var(--panel) 42%),
     radial-gradient(120% 80% at 88% -10%, var(--wash-claude), transparent 60%),
-    radial-gradient(110% 90% at 6% 108%, var(--wash-codex), transparent 62%);
+    radial-gradient(110% 90% at 6% 108%, var(--wash-codex), transparent 62%),
+    radial-gradient(90% 70% at 50% 120%, var(--wash-cursor), transparent 58%);
   box-shadow: inset 0 1px 0 var(--bezel-lip), var(--bezel-shadow);
   overflow: hidden;
   animation: settle .42s cubic-bezier(.2, .8, .3, 1) both;
@@ -240,7 +266,11 @@ html, body {
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
 .dot.claude { background: var(--claude); }
 .dot.codex { background: var(--codex); }
-.dot.split { background: linear-gradient(90deg, var(--claude) 50%, var(--codex) 50%); }
+.dot.cursor { background: var(--cursor); }
+.dot.split {
+  background: linear-gradient(90deg,
+    var(--claude) 0 33.3%, var(--codex) 33.3% 66.6%, var(--cursor) 66.6% 100%);
+}
 
 .status {
   -webkit-app-region: no-drag;
@@ -340,12 +370,13 @@ body.stale .pulse { background: var(--stale); box-shadow: 0 0 9px var(--stale); 
 .legend i[data-level="4"] { background: var(--cell-4); }
 .ramp-single i:first-of-type { margin-left: 4px; }
 .ramp-single i:last-of-type { margin-right: 4px; }
-/* One ramp when a single provider is selected; both when they are combined,
-   because a cell's colour then tells you which provider it belongs to. */
-.ramp-claude, .ramp-codex { display: none; }
+/* One ramp when a single provider is selected; all three when they are
+   combined, because a cell's colour then tells you which provider owns it. */
+.ramp-claude, .ramp-codex, .ramp-cursor { display: none; }
 body[data-provider="all"] .ramp-single { display: none; }
 body[data-provider="all"] .ramp-claude,
-body[data-provider="all"] .ramp-codex { display: flex; }
+body[data-provider="all"] .ramp-codex,
+body[data-provider="all"] .ramp-cursor { display: flex; }
 
 /* The reference line: the same number the readout shows, in units a person can
    actually picture. Click to cycle to a different yardstick. */
@@ -445,6 +476,7 @@ body[data-provider="all"] .ramp-codex { display: flex; }
 /* Same two hues, re-cut for whichever ground the tooltip is sitting on. */
 .tip .c { color: var(--tip-claude); }
 .tip .x { color: var(--tip-codex); }
+.tip .u { color: var(--tip-cursor); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

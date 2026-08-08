@@ -60,6 +60,6 @@ test('overlapping roots do not double-count a transcript', async () => {
 
 test('an unknown home yields empty data rather than throwing', async () => {
   const result = await collect({ home: path.join(os.tmpdir(), 'cadence-nonexistent-home'), env: {} });
-  assert.deepEqual(result.files, { claude: 0, codex: 0, backfilled: 0 });
+  assert.deepEqual(result.files, { claude: 0, codex: 0, cursor: 0, backfilled: 0 });
   assert.deepEqual(result.days, {});
 });

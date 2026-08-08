@@ -10,7 +10,7 @@ const state = { provider: 'all', metric: 'signal', report: null, busy: false, fl
 // Mirrors what the main process has on disk. Defaults match its own, so the
 // panel still behaves sanely when it is opened in a browser with no bridge.
 const settings = {
-  theme: 'system',
+  theme: 'dark',
   scanSeconds: 60,
   launchAtLogin: false,
   rotateComparisons: true,
@@ -30,6 +30,13 @@ const METRICS = {
 function level(value, max) {
   if (!value) return 0;
   return Math.min(4, Math.max(1, Math.ceil((Math.log1p(value) / Math.log1p(max || 1)) * 4)));
+}
+
+/** Mirrors `owner()` in src/svg.js: the day belongs to whoever ran the most. */
+function owner(claude, codex, cursor) {
+  if (codex > claude && codex >= cursor) return 'codex';
+  if (cursor > claude && cursor > codex) return 'cursor';
+  return 'claude';
 }
 
 function dayLabel(key) {
@@ -122,11 +129,13 @@ function render(report) {
     cell.dataset.value = day[metric];
     const claude = day.providers.claude[metric];
     const codex = day.providers.codex[metric];
+    const cursor = day.providers.cursor?.[metric] || 0;
     cell.dataset.claude = claude;
     cell.dataset.codex = codex;
+    cell.dataset.cursor = cursor;
     // In the combined view, paint the day in whichever provider did more of it.
     // Claude takes ties, which also covers Claude-only days.
-    if (day[metric] > 0) cell.dataset.owner = codex > claude ? 'codex' : 'claude';
+    if (day[metric] > 0) cell.dataset.owner = owner(claude, codex, cursor);
     if (day.backfilled && day.signal > 0) cell.dataset.backfilled = '1';
     if (day.date === todayKey) cell.dataset.today = '1';
     // Stagger the load bloom by column so the grid fills left to right.
@@ -300,19 +309,24 @@ $('#grid').addEventListener('pointerover', (event) => {
   if (!cell) return;
   const value = Number(cell.dataset.value);
   // Emphasise the provider that owns the day, matching the cell's colour.
-  const owner = cell.dataset.owner;
-  const side = (key, cls, label) => {
+  const ownedBy = cell.dataset.owner;
+  const side = ([key, cls, label]) => {
     const text = `<span class="${cls}">${label} ${compact.format(cell.dataset[key])}</span>`;
-    return owner === key ? `<b class="lead">${text}</b>` : text;
+    return ownedBy === key ? `<b class="lead">${text}</b>` : text;
   };
+  // Three providers would make for a long tooltip, so a side only appears once
+  // it has something to report — on a quiet day there is nothing to compare.
   const detail = state.provider === 'all'
-    ? `${side('claude', 'c', 'C')} · ${side('codex', 'x', 'X')}`
+    ? [['claude', 'c', 'C'], ['codex', 'x', 'X'], ['cursor', 'u', 'U']]
+      .filter(([key]) => Number(cell.dataset[key]) > 0)
+      .map(side)
+      .join(' · ')
     : `${state.provider.toUpperCase()}`;
   const note = cell.dataset.backfilled
     ? `<i> · from stats cache${state.metric === 'tokens' ? ', no cache data' : ''}</i>`
     : '';
   tip.innerHTML = `<b>${value ? full.format(value) : 'No'} ${METRICS[state.metric].label.toLowerCase()} tokens</b>`
-    + `<i>${dayLabel(cell.dataset.date)}</i> · ${detail}${note}`;
+    + `<i>${dayLabel(cell.dataset.date)}</i>${detail ? ` · ${detail}` : ''}${note}`;
   tip.hidden = false;
   const box = cell.getBoundingClientRect();
   const width = tip.offsetWidth;
@@ -359,7 +373,8 @@ function demoReport(provider) {
     const wave = Math.max(0, Math.sin(index * .43) + Math.cos(index * .17) - .45);
     const claude = index % 11 === 0 ? 0 : Math.round(wave * 92000 + (index % 5) * 2100);
     const codex = index % 7 === 0 ? 0 : Math.round(Math.max(0, Math.cos(index * .31) - .15) * 68000);
-    const signal = provider === 'claude' ? claude : provider === 'codex' ? codex : claude + codex;
+    const cursor = index % 4 === 0 ? Math.round(Math.max(0, Math.sin(index * .11) + .2) * 74000) : 0;
+    const signal = provider === 'all' ? claude + codex + cursor : { claude, codex, cursor }[provider] || 0;
     daily.push({
       date: cursor.toLocaleDateString('en-CA'),
       signal, tokens: signal * 8, input: Math.round(signal * .7), output: Math.round(signal * .3),
@@ -367,6 +382,7 @@ function demoReport(provider) {
       providers: {
         claude: { signal: claude, tokens: claude * 8 },
         codex: { signal: codex, tokens: codex * 8 },
+        cursor: { signal: cursor, tokens: cursor * 8 },
       },
     });
     totals.signal += signal;
@@ -378,7 +394,7 @@ function demoReport(provider) {
     schemaVersion: 3, generatedAt: new Date().toISOString(), provider, metrics: ['signal', 'tokens'],
     range: { from: daily[0].date, to: daily[daily.length - 1].date },
     totals, activeDays: active.length, backfilledDays: 24, longestStreak: 9,
-    peakDay: null, daily, sources: { claude: 0, codex: 0, backfilled: 0 },
+    peakDay: null, daily, sources: { claude: 0, codex: 0, cursor: 0, backfilled: 0 },
     comparisons: {
       signal: ['~4 runs through the Harry Potter series', '~5 passes through all of Shakespeare'],
       tokens: ['~32 runs through the Harry Potter series', '~39 passes through all of Shakespeare'],

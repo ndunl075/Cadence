@@ -6,21 +6,45 @@
   --panel-top: #171b21;
   --line: #262b33;
   --hair: #1d2128;
-  --claude: #e88d55;
-  --codex: #45b9e8;
+  /* Palette taken from the products themselves rather than approximated.
+   *
+   * Claude — Anthropic's `--orange-*` scale and `--clay`, read out of the
+   *          Claude Code binary. #d97757 is Clawd's own body colour, straight
+   *          from the mascot's CLAWD_PAL sprite palette.
+   * Codex  — OpenAI's `--blue-*` and `--purple-*` design tokens, read out of
+   *          the Codex extension. Its ramp climbs from deep blue into violet,
+   *          which is the blue-purple Codex actually uses.
+   */
+  --claude: #d97757;  /* Anthropic --clay / CLAWD_PAL body */
+  --codex: #0285ff;   /* Codex --blue-400 */
   --live: #5bdd93;
-  --cell-0: #1c2027;
-  --cell-1: #38445a;
-  --cell-2: #5c7390;
-  --cell-3: #a57969;
-  --cell-4: #ed965f;
+  /* Combined runs cold to hot — Codex blue at the low end, Claude orange at the
+     top — so a heavy day is unmistakable at a glance. Step 2 sits between the
+     two Codex blues so lightness still climbs across all four steps; a brighter
+     blue there would make a level-2 day out-glow a level-3 one. */
+  --cell-0: #1a1e25;
+  --cell-1: #00284d;
+  --cell-2: #0156a6;
+  --cell-3: #c25124;
+  --cell-4: #eb6834;
+  --glow: rgba(235, 104, 52, .6);
   --mono: "Cascadia Mono", "SFMono-Regular", ui-monospace, Consolas, monospace;
   --cell: 9px;
   --gap: 2px;
 }
 
-body[data-provider="claude"] { --cell-1: #5a301d; --cell-2: #98502c; --cell-3: #d27641; --cell-4: #f2a06c; }
-body[data-provider="codex"] { --cell-1: #133a56; --cell-2: #17678f; --cell-3: #249bc8; --cell-4: #75d3ef; }
+/* Claude: Anthropic --orange-750 / -550 / -450 / -350, ending on the most
+   saturated true orange in their scale. */
+body[data-provider="claude"] {
+  --cell-1: #4b1b08; --cell-2: #993d19; --cell-3: #c25124; --cell-4: #eb6834;
+  --glow: rgba(235, 104, 52, .65);
+}
+/* Codex: --blue-900 → --blue-400 → --purple-400 → --purple-300, the blue-into-
+   violet climb Codex uses for its own accents. */
+body[data-provider="codex"] {
+  --cell-1: #00284d; --cell-2: #0285ff; --cell-3: #924ff7; --cell-4: #ad7bf9;
+  --glow: rgba(173, 123, 249, .65);
+}
 
 * { box-sizing: border-box; }
 
@@ -50,8 +74,8 @@ html, body {
   border: 1px solid var(--line);
   background:
     linear-gradient(180deg, var(--panel-top), var(--panel) 42%),
-    radial-gradient(120% 80% at 88% -10%, rgba(232, 141, 85, .13), transparent 60%),
-    radial-gradient(110% 90% at 6% 108%, rgba(69, 185, 232, .11), transparent 62%);
+    radial-gradient(120% 80% at 88% -10%, rgba(217, 119, 87, .14), transparent 60%),
+    radial-gradient(110% 90% at 6% 108%, rgba(2, 133, 255, .12), transparent 62%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, .05),
     0 22px 48px rgba(0, 0, 0, .5),
@@ -171,10 +195,13 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
 .cell[data-level="1"] { background: var(--cell-1); }
 .cell[data-level="2"] { background: var(--cell-2); }
 .cell[data-level="3"] { background: var(--cell-3); }
-.cell[data-level="4"] { background: var(--cell-4); }
+/* The busiest days actually burn. */
+.cell[data-level="4"] { background: var(--cell-4); box-shadow: 0 0 5px var(--glow); }
 /* Backfilled days come from Claude Code's stats cache, not a transcript. Same
    scale, lower confidence — marked with a hairline rather than a colour shift. */
-.cell[data-backfilled="1"] { box-shadow: inset 0 0 0 1px rgba(240, 238, 233, .22); }
+.cell[data-backfilled="1"] { box-shadow: inset 0 0 0 1px rgba(240, 238, 233, .26); }
+/* A backfilled day can also be a peak day — keep the hairline and the glow. */
+.cell[data-level="4"][data-backfilled="1"] { box-shadow: inset 0 0 0 1px rgba(240, 238, 233, .3), 0 0 5px var(--glow); }
 .cell[data-today="1"] { outline-color: rgba(240, 238, 233, .5); outline-offset: 1px; }
 .cell:hover { transform: scale(1.5); filter: brightness(1.3); }
 .grid:hover .cell:not(:hover) { filter: saturate(.65); }
@@ -242,8 +269,9 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
 }
 .tip b { display: block; font-size: 10px; letter-spacing: -.02em; }
 .tip i { font-style: normal; color: #6a707c; }
-.tip .c { color: #a85a2a; }
-.tip .x { color: #14688f; }
+/* Same two hues, darkened for the light tooltip ground. */
+.tip .c { color: #a83f16; }
+.tip .x { color: #5b21c9; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

@@ -1,9 +1,12 @@
 'use strict';
 
+// Matches the widget, using each product's own design tokens: Anthropic's
+// --orange-750/-550/-450/-350 for Claude, and OpenAI's --blue-900/-400 into
+// --purple-400/-300 for Codex. Combined runs Codex blue up into Claude orange.
 const PALETTES = {
-  claude: ['#201a17', '#63351f', '#9d4f28', '#d9773d', '#f4a261'],
-  codex: ['#151d29', '#123c60', '#176ca0', '#28a5d6', '#83d8f4'],
-  all: ['#181b22', '#38445a', '#5d7696', '#a78375', '#e39158'],
+  claude: ['#1d1712', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
+  codex: ['#141a24', '#00284d', '#0285ff', '#924ff7', '#ad7bf9'],
+  all: ['#171a21', '#00284d', '#0156a6', '#c25124', '#eb6834'],
 };
 
 function escape(value) {

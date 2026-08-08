@@ -6,11 +6,11 @@ Your AI coding rhythm, on your desktop. Cadence is a small always-on-top widget 
 
 [**Download Cadence for Windows (x64)**](https://github.com/ndunl075/Cadence/releases/latest/download/cadence.exe)
 
-Download `cadence.exe` and open it. The widget appears in the top-right corner of your primary display and floats above your other windows. Windows SmartScreen may show a warning because this early open-source build is not code-signed yet.
+Download `cadence.exe` and open it. The widget tucks into the top-left corner of your primary display and floats above your other windows. Windows SmartScreen may show a warning because this early open-source build is not code-signed yet.
 
 - Frameless panel that stays on top, drag it anywhere by its header
 - Remembers its position, size, pinned state, metric, and provider between launches
-- Claude-only in warm orange, Codex-only in signal blue, or both combined
+- Claude-only in burnt orange, Codex-only in electric blue, or both on one cold-to-hot ramp
 - Month labels and a full date range, with per-day figures on hover
 - A reference line that puts your total in human units — *~2,063 runs through the Harry Potter series*
 - Rescans local logs every minute; click the timestamp to rescan now
@@ -20,18 +20,40 @@ Cadence never reads prompt text or source code into its reports. It only aggrega
 
 ### Widget controls
 
-| Control | What it does |
-| --- | --- |
-| Header | Drag to move the panel |
-| Pin | Toggle always-on-top; the pin tilts and dims when off |
-| Timestamp | Force an immediate rescan (or `Ctrl+R`) |
-| Bottom-left figure | Switch between SIGNAL and TOTAL (see below) |
-| Reference line | Click for another comparison; it also rotates on its own |
-| Minimize | Send to the taskbar (or `Esc`) |
-| Close | Quit Cadence |
+Window controls sit at the top-left; the live indicator and wordmark at the top-right.
 
-Drag any edge to resize. Cells scale to fit the width, so a wider panel shows a
-larger graph rather than more empty space.
+| Control | Where | What it does |
+| --- | --- | --- |
+| Close | top-left | Quit Cadence |
+| Minimize | top-left | Send to the taskbar (or `Esc`) |
+| Pin | top-left | Toggle always-on-top; the pin tilts and dims when off |
+| Timestamp | top-right | Force an immediate rescan (or `Ctrl+R`) |
+| Provider row | below header | Switch between combined, Claude, and Codex |
+| Bottom-left figure | readout | Switch between SIGNAL and TOTAL (see below) |
+| Reference line | bottom | Click for another comparison; it also rotates on its own |
+
+Drag the header to move the panel and any edge to resize. Cells scale to fit the
+width, so a wider panel shows a larger graph rather than more empty space.
+
+### Reading the colours
+
+Intensity is a log scale across five steps. The palettes are not approximations
+of each brand — they are the products' own design tokens:
+
+| View | Ramp | Source |
+| --- | --- | --- |
+| **Claude** | `#4b1b08` → `#993d19` → `#c25124` → `#eb6834` | Anthropic `--orange-750/-550/-450/-350` |
+| **Codex** | `#00284d` → `#0285ff` → `#924ff7` → `#ad7bf9` | OpenAI `--blue-900/-400` into `--purple-400/-300` |
+| **Combined** | `#00284d` → `#0156a6` → `#c25124` → `#eb6834` | Codex blue climbing into Claude orange |
+
+The Claude accent dot is `#d97757` — Anthropic's `--clay`, and the body colour
+of Clawd, the Claude Code mascot. The Codex ramp climbs out of blue into violet
+because that is the blue-purple pairing Codex uses for its own accents.
+
+Lightness increases strictly across every ramp, so a busier day is never darker
+than a quieter one. Peak days carry a soft glow in their own hue, and days
+backfilled from the stats cache get a hairline border so you can tell measured
+days from reconstructed ones. The SVG endpoint uses the same three palettes.
 
 ## Two ways to count
 
@@ -48,6 +70,30 @@ Cache reads dominate — around 97% of raw volume — because every turn re-read
 2. **It is the only figure that reaches back through your whole history.** Claude Code prunes old transcripts but keeps per-day totals in `stats-cache.json`, and that file records input + output only — so backfilled days have no cache figures at all.
 
 The API exposes both: every daily row carries `signal` and `tokens`, and the SVG accepts `?metric=tokens`.
+
+## The reference line
+
+The strip along the bottom restates whichever total you are showing in units a
+person can actually picture, drawn from 74 reference works and activities:
+
+```text
+≈ 2,063 runs through the Harry Potter series
+≈ 38 copies of the Oxford English Dictionary
+≈ 48% of all of English Wikipedia
+≈ 4.9 copies of the US tax code
+≈ 8.9 days of nonstop typing
+```
+
+References span novels and series, short works, founding documents and
+speeches, reference works up to the whole of English Wikipedia, sustained
+reading and speaking and typing rates, screenplays and TED talks, and everyday
+writing down to a single text message. Cadence picks the two dozen that land on
+a graspable multiple for your total and cycles through them, so the line stays
+meaningful whether you are on your first day or your billionth token. Click it
+to advance immediately.
+
+Word counts are commonly cited figures converted at roughly 4/3 tokens per
+English word. They are deliberately approximate — hence the `≈`.
 
 ## Full history and backfill
 

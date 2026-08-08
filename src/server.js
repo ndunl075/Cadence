@@ -7,6 +7,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { collect, summarize, PROVIDERS } = require('./usage');
 const { renderSvg } = require('./svg');
+const { comparisons } = require('./comparisons');
 
 const args = process.argv.slice(2);
 const valueAfter = (flag, fallback) => {
@@ -36,8 +37,13 @@ async function refresh(force = false) {
 function reportFrom(url, data) {
   const requested = url.searchParams.get('provider') || 'all';
   const provider = PROVIDERS.includes(requested) ? requested : 'all';
-  const year = Number(url.searchParams.get('year')) || new Date().getFullYear();
-  return summarize(data.days, provider, year);
+  // No year/weeks parameter means the full recorded history.
+  const options = {};
+  const year = Number(url.searchParams.get('year'));
+  const weeks = Number(url.searchParams.get('weeks'));
+  if (year) options.year = year;
+  if (weeks) options.weeks = weeks;
+  return summarize(data.days, provider, options);
 }
 
 function json(response, status, body) {
@@ -49,7 +55,15 @@ async function handler(request, response) {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   if (url.pathname === '/api/v1/usage') {
     const data = await refresh();
-    return json(response, 200, { ...reportFrom(url, data), sources: data.files });
+    const summary = reportFrom(url, data);
+    return json(response, 200, {
+      ...summary,
+      comparisons: {
+        signal: comparisons(summary.totals.signal),
+        tokens: comparisons(summary.totals.tokens),
+      },
+      sources: data.files,
+    });
   }
   if (url.pathname === '/api/v1/status') {
     const data = await refresh();
@@ -61,7 +75,10 @@ async function handler(request, response) {
   }
   if (url.pathname === '/api/v1/heatmap.svg') {
     const data = await refresh();
-    const svg = renderSvg(reportFrom(url, data), { title: url.searchParams.get('title') || undefined });
+    const svg = renderSvg(reportFrom(url, data), {
+      title: url.searchParams.get('title') || undefined,
+      metric: url.searchParams.get('metric') || undefined,
+    });
     response.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
     return response.end(svg);
   }
@@ -83,7 +100,7 @@ async function exportFiles(directory) {
   const data = await refresh(true);
   await fs.promises.mkdir(directory, { recursive: true });
   for (const provider of ['all', ...PROVIDERS]) {
-    const report = summarize(data.days, provider, new Date().getFullYear());
+    const report = summarize(data.days, provider);
     await fs.promises.writeFile(path.join(directory, `cadence-${provider}.json`), JSON.stringify(report, null, 2));
     await fs.promises.writeFile(path.join(directory, `cadence-${provider}.svg`), renderSvg(report));
   }

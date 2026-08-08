@@ -1,21 +1,53 @@
 {
   "name": "cadence-ai",
-  "version": "0.1.0",
-  "description": "A local-first contribution graph for Claude Code and Codex.",
+  "version": "0.2.0",
+  "description": "A local-first desktop widget charting your Claude Code and Codex rhythm.",
   "license": "MIT",
   "private": true,
-  "bin": "src/server.js",
-  "scripts": {
-    "start": "node src/server.js",
-    "dev": "node src/server.js --no-open",
-    "test": "node --test",
-    "build:exe": "pkg . --targets node22-win-x64 --output dist/cadence.exe"
+  "main": "electron/main.js",
+  "bin": {
+    "cadence-server": "src/server.js"
   },
-  "pkg": {
-    "assets": ["public/**/*"],
-    "outputPath": "dist"
+  "scripts": {
+    "start": "electron .",
+    "server": "node src/server.js --no-open",
+    "export": "node src/server.js --export ./out",
+    "test": "node --test",
+    "build:icon": "node scripts/build-icon.mjs",
+    "build:exe": "npm run build:icon && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "dev.cadence.widget",
+    "productName": "Cadence",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "assets/**/*",
+      "electron/**/*",
+      "public/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/cadence.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "cadence.exe"
+    }
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "^6.5.1"
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.3"
   }
 }

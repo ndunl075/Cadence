@@ -1,0 +1,250 @@
+:root {
+  --ink: #f0eee9;
+  --muted: #7d838f;
+  --dim: #5d636e;
+  --panel: #101318;
+  --panel-top: #171b21;
+  --line: #262b33;
+  --hair: #1d2128;
+  --claude: #e88d55;
+  --codex: #45b9e8;
+  --live: #5bdd93;
+  --cell-0: #1c2027;
+  --cell-1: #38445a;
+  --cell-2: #5c7390;
+  --cell-3: #a57969;
+  --cell-4: #ed965f;
+  --mono: "Cascadia Mono", "SFMono-Regular", ui-monospace, Consolas, monospace;
+  --cell: 9px;
+  --gap: 2px;
+}
+
+body[data-provider="claude"] { --cell-1: #5a301d; --cell-2: #98502c; --cell-3: #d27641; --cell-4: #f2a06c; }
+body[data-provider="codex"] { --cell-1: #133a56; --cell-2: #17678f; --cell-3: #249bc8; --cell-4: #75d3ef; }
+
+* { box-sizing: border-box; }
+
+:focus { outline: none; }
+:focus-visible { outline: 1px solid rgba(240, 238, 233, .45); outline-offset: 2px; border-radius: 4px; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--mono);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The bezel is the whole widget: a rack panel with a hairline lip, sitting on
+   the desktop rather than in a page. Everything else nests inside it. */
+.bezel {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto auto;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, var(--panel-top), var(--panel) 42%),
+    radial-gradient(120% 80% at 88% -10%, rgba(232, 141, 85, .13), transparent 60%),
+    radial-gradient(110% 90% at 6% 108%, rgba(69, 185, 232, .11), transparent 62%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .05),
+    0 22px 48px rgba(0, 0, 0, .5),
+    0 2px 8px rgba(0, 0, 0, .35);
+  overflow: hidden;
+  animation: settle .42s cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes settle { from { opacity: 0; transform: translateY(-6px) scale(.985); } }
+
+.grain {
+  position: absolute; inset: 0; z-index: 5; opacity: .04; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+}
+
+/* ---- title chrome (the drag handle) ---- */
+/* Window controls sit at the top-left, brand and live status at the top-right. */
+.chrome {
+  -webkit-app-region: drag;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 13px 0 6px; height: 34px;
+  border-bottom: 1px solid var(--hair);
+}
+.chrome-brand { display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 9px; }
+.mark { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+.mark i { width: 2px; background: var(--ink); display: block; animation: signal 2.2s ease-in-out infinite; }
+.mark i:nth-child(1) { height: 5px; }
+.mark i:nth-child(2) { height: 11px; animation-delay: -.4s; }
+.mark i:nth-child(3) { height: 8px; animation-delay: -.8s; }
+.mark i:nth-child(4) { height: 4px; animation-delay: -1.2s; }
+@keyframes signal { 0%, 100% { transform: scaleY(.55); opacity: .5; } 50% { transform: scaleY(1); opacity: 1; } }
+.wordmark { font-size: 10px; font-weight: 600; letter-spacing: .22em; }
+
+.chrome-actions { -webkit-app-region: no-drag; display: flex; gap: 1px; }
+.icon {
+  position: relative;
+  width: 24px; height: 22px; display: grid; place-items: center;
+  border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer;
+  transition: color .14s ease, background .14s ease;
+}
+.icon svg { width: 13px; height: 13px; fill: currentColor; transition: transform .14s ease, opacity .14s ease; }
+.icon:hover { background: rgba(255, 255, 255, .07); color: var(--ink); }
+.icon.danger:hover { background: rgba(224, 92, 74, .18); color: #ff9d90; }
+/* Pinned is the default, so the affordance shows the *un*pinned state instead:
+   the pin tilts loose and dims when the panel stops floating. */
+.icon[aria-pressed="true"] { color: var(--claude); }
+.icon[aria-pressed="false"] svg { opacity: .5; transform: rotate(38deg); }
+
+/* ---- provider rail ---- */
+.rail {
+  -webkit-app-region: drag;
+  display: flex; align-items: center;
+  gap: 10px; padding: 9px 13px 7px;
+}
+.segments { -webkit-app-region: no-drag; display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: rgba(0, 0, 0, .3); border: 1px solid var(--hair); }
+.segments button {
+  display: flex; align-items: center; gap: 5px;
+  border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+  color: var(--dim); font: 600 8.5px var(--mono); letter-spacing: .11em;
+  padding: 5px 8px; transition: color .14s ease, background .14s ease;
+}
+.segments button:hover { color: #b9bfc9; }
+.segments button.active { color: var(--ink); background: #262c36; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+.dot.claude { background: var(--claude); }
+.dot.codex { background: var(--codex); }
+.dot.split { background: linear-gradient(90deg, var(--claude) 50%, var(--codex) 50%); }
+
+.status {
+  -webkit-app-region: no-drag;
+  display: flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer;
+  color: var(--dim); font: 500 8.5px var(--mono); letter-spacing: .1em; padding: 4px 2px;
+  transition: color .14s ease;
+}
+.status:hover { color: #b9bfc9; }
+.pulse { width: 5px; height: 5px; border-radius: 50%; background: var(--live); box-shadow: 0 0 9px var(--live); animation: breathe 2.6s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+body.busy .pulse { animation-duration: .7s; }
+body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
+
+/* ---- heatmap ---- */
+/* Centred so any height the user drags in distributes above and below the grid
+   rather than pooling under it. */
+.plot { display: flex; gap: 6px; padding: 2px 13px 0; min-height: 0; align-items: center; }
+.weekdays {
+  display: grid; grid-template-rows: repeat(7, var(--cell)); gap: var(--gap);
+  width: 9px; margin-top: 14px; color: #4e545e; font-size: 7px; line-height: var(--cell);
+}
+.weekdays span:nth-child(1) { grid-row: 2; }
+.weekdays span:nth-child(2) { grid-row: 4; }
+.weekdays span:nth-child(3) { grid-row: 6; }
+
+.grid-wrap { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: 1px 0 3px; scrollbar-width: none; }
+.grid-wrap::-webkit-scrollbar { height: 0; }
+.grid {
+  display: grid; grid-template-rows: repeat(7, var(--cell));
+  grid-auto-flow: column; grid-auto-columns: var(--cell); gap: var(--gap);
+  width: max-content;
+}
+/* Shares the grid's column track sizing so a label lands over the exact week
+   its month begins. Labels overflow their track rather than squeezing it. */
+.months {
+  display: grid; grid-auto-flow: column; grid-auto-columns: var(--cell); gap: var(--gap);
+  width: max-content; height: 13px; align-items: center;
+  color: #656b76; font-size: 7px; letter-spacing: .1em;
+}
+.months span { white-space: nowrap; overflow: visible; }
+.months span.year { color: #868d99; }
+.cell {
+  width: var(--cell); height: var(--cell); border-radius: 1.5px;
+  background: var(--cell-0);
+  animation: bloom .4s ease-out both;
+  transition: transform .1s ease, filter .1s ease, outline-color .1s ease;
+  outline: 1px solid transparent; outline-offset: 0;
+}
+@keyframes bloom { from { opacity: 0; transform: scale(.4); } }
+.cell[data-level="1"] { background: var(--cell-1); }
+.cell[data-level="2"] { background: var(--cell-2); }
+.cell[data-level="3"] { background: var(--cell-3); }
+.cell[data-level="4"] { background: var(--cell-4); }
+/* Backfilled days come from Claude Code's stats cache, not a transcript. Same
+   scale, lower confidence — marked with a hairline rather than a colour shift. */
+.cell[data-backfilled="1"] { box-shadow: inset 0 0 0 1px rgba(240, 238, 233, .22); }
+.cell[data-today="1"] { outline-color: rgba(240, 238, 233, .5); outline-offset: 1px; }
+.cell:hover { transform: scale(1.5); filter: brightness(1.3); }
+.grid:hover .cell:not(:hover) { filter: saturate(.65); }
+
+/* ---- readout ---- */
+.readout {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--hair); margin-top: 6px;
+}
+.readout div, .readout .metric-cell { padding: 9px 6px 8px 13px; min-width: 0; }
+.readout > * + * { border-left: 1px solid var(--hair); padding-left: 11px; }
+.readout b { display: block; font-size: 15px; font-weight: 400; letter-spacing: -.045em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.readout span { display: block; margin-top: 3px; color: #565c66; font-size: 7.5px; letter-spacing: .13em; }
+
+/* The headline metric is a control, not a label — clicking it swaps the whole
+   graph between input+output and cache-inclusive totals. */
+.metric-cell {
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: left;
+  cursor: pointer; border-radius: 0 0 0 11px; transition: background .14s ease;
+}
+.metric-cell:hover { background: rgba(255, 255, 255, .045); }
+.metric-cell:hover span { color: #8b919c; }
+.metric-cell span::after { content: ' ⇄'; opacity: 0; transition: opacity .14s ease; }
+.metric-cell:hover span::after { opacity: .8; }
+
+.caption {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 13px 8px 35px;
+  color: #4b515b; font-size: 7px; letter-spacing: .1em; white-space: nowrap;
+}
+.legend { display: flex; align-items: center; gap: 3px; }
+.legend i { width: 7px; height: 7px; border-radius: 1.5px; background: var(--cell-0); }
+.legend i[data-level="1"] { background: var(--cell-1); }
+.legend i[data-level="2"] { background: var(--cell-2); }
+.legend i[data-level="3"] { background: var(--cell-3); }
+.legend i[data-level="4"] { background: var(--cell-4); }
+.legend i:first-of-type { margin-left: 4px; }
+.legend i:last-of-type { margin-right: 4px; }
+
+/* The reference line: the same number the readout shows, in units a person can
+   actually picture. Click to cycle to a different yardstick. */
+.flavour {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  border: 0; border-top: 1px solid var(--hair); background: rgba(0, 0, 0, .22);
+  padding: 7px 13px 8px; cursor: pointer; text-align: left;
+  color: #6f7683; font: inherit; font-size: 8.5px; letter-spacing: .04em;
+  border-radius: 0 0 11px 11px;
+  transition: color .16s ease, background .16s ease;
+}
+.flavour:hover { color: #aab1bc; background: rgba(0, 0, 0, .34); }
+.flavour-mark { color: var(--claude); font-size: 10px; line-height: 1; }
+#flavour-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  animation: swap .34s ease-out;
+}
+@keyframes swap { from { opacity: 0; transform: translateY(3px); } }
+
+.tip {
+  position: absolute; z-index: 10; pointer-events: none;
+  padding: 6px 8px; border-radius: 4px;
+  background: #f0eee9; color: #14171c;
+  font-size: 8.5px; line-height: 1.5; letter-spacing: .02em;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .5);
+  white-space: nowrap;
+}
+.tip b { display: block; font-size: 10px; letter-spacing: -.02em; }
+.tip i { font-style: normal; color: #6a707c; }
+.tip .c { color: #a85a2a; }
+.tip .x { color: #14688f; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

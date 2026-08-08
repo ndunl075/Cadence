@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'">
+  <title>Cadence</title>
+  <link rel="stylesheet" href="widget.css">
+</head>
+<body>
+  <div class="bezel">
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="chrome">
+      <div class="chrome-actions">
+        <button id="close" class="icon danger" title="Quit Cadence" aria-label="Quit Cadence">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.3 3.3 8 7l3.7-3.7 1 1L9 8l3.7 3.7-1 1L8 9l-3.7 3.7-1-1L7 8 3.3 4.3z"/></svg>
+        </button>
+        <button id="minimize" class="icon" title="Minimize" aria-label="Minimize">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7.3" width="10" height="1.4" rx=".7"/></svg>
+        </button>
+        <button id="pin" class="icon" title="Keep on top" aria-pressed="true" aria-label="Keep on top">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1.6 14.4 6.4 12.2 7l-.8 3.6-2.3-2.3-3.9 3.9-.7-.7 3.9-3.9-2.3-2.3L9 4.4z"/></svg>
+        </button>
+      </div>
+      <div class="chrome-brand">
+        <button id="scan" class="status" title="Rescan local logs">
+          <span class="pulse" aria-hidden="true"></span><span id="status-text">SCANNING</span>
+        </button>
+        <div class="brand">
+          <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span class="wordmark">CADENCE</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="rail">
+      <div class="segments" role="group" aria-label="Provider">
+        <button data-provider="all" class="active"><span class="dot split"></span>ALL</button>
+        <button data-provider="claude"><span class="dot claude"></span>CLAUDE</button>
+        <button data-provider="codex"><span class="dot codex"></span>CODEX</button>
+      </div>
+    </div>
+
+    <main class="plot">
+      <div class="weekdays" aria-hidden="true"><span>M</span><span>W</span><span>F</span></div>
+      <div class="grid-wrap">
+        <div class="months" id="months" aria-hidden="true"></div>
+        <div class="grid" id="grid" role="img" aria-label="Daily token signal"></div>
+      </div>
+    </main>
+
+    <div class="caption">
+      <span id="span"></span>
+      <span class="legend" aria-hidden="true">
+        LESS<i data-level="0"></i><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i>MORE
+      </span>
+    </div>
+
+    <footer class="readout">
+      <button id="metric" class="metric-cell" title="Switch between input+output and cache-inclusive totals">
+        <b id="total">—</b><span id="total-label">SIGNAL</span>
+      </button>
+      <div><b id="streak">—</b><span>STREAK</span></div>
+      <div><b id="active">—</b><span>ACTIVE</span></div>
+      <div><b id="today">—</b><span>TODAY</span></div>
+    </footer>
+
+    <button id="flavour" class="flavour" title="Another comparison">
+      <span class="flavour-mark" aria-hidden="true">≈</span><span id="flavour-text">—</span>
+    </button>
+
+    <div class="tip" id="tip" role="tooltip" hidden></div>
+  </div>
+
+  <script src="widget.js"></script>
+</body>
+</html>

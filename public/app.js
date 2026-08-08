@@ -31,27 +31,28 @@ function render(report) {
   document.body.dataset.provider = report.provider;
   const heatmap = $('#heatmap');
   heatmap.replaceChildren();
-  const max = Math.max(...report.daily.map((day) => day.tokens), 1);
+  const max = Math.max(...report.daily.map((day) => day.signal), 1);
   const firstOffset = new Date(`${report.daily[0].date}T12:00:00`).getDay();
   for (let index = 0; index < firstOffset; index += 1) heatmap.append(document.createElement('span'));
   for (const day of report.daily) {
     const cell = document.createElement('button');
     cell.className = 'cell';
-    cell.dataset.level = level(day.tokens, max);
+    cell.dataset.level = level(day.signal, max);
     cell.dataset.date = day.date;
-    cell.dataset.tokens = day.tokens;
-    cell.dataset.claude = day.providers.claude;
-    cell.dataset.codex = day.providers.codex;
-    cell.setAttribute('aria-label', `${day.date}: ${day.tokens.toLocaleString()} tokens`);
+    cell.dataset.tokens = day.signal;
+    cell.dataset.claude = day.providers.claude.signal;
+    cell.dataset.codex = day.providers.codex.signal;
+    cell.setAttribute('aria-label', `${day.date}: ${day.signal.toLocaleString()} tokens`);
     heatmap.append(cell);
   }
   buildMonths(report);
-  $('#tokens').textContent = compact.format(report.totals.tokens);
+  $('#tokens').textContent = compact.format(report.totals.signal);
   $('#active-days').textContent = report.activeDays.toLocaleString();
   $('#streak').textContent = `${report.longestStreak}d`;
   $('#peak').textContent = report.peakDay ? compact.format(report.peakDay.tokens) : '—';
   $('#peak-date').textContent = report.peakDay ? new Date(`${report.peakDay.date}T12:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : 'no activity yet';
   $('#token-mix').textContent = `${compact.format(report.totals.input)} input · ${compact.format(report.totals.output)} output`;
+  if (report.range) $('#active-range').textContent = `${report.range.from} → ${report.range.to}`;
   $('#claude-files').textContent = report.sources?.claude ?? '—';
   $('#codex-files').textContent = report.sources?.codex ?? '—';
   $('#updated').textContent = `UPDATED ${new Date(report.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -80,7 +81,7 @@ function demoReport(provider) {
   const end = new Date(year, 11, 31, 12);
   const today = new Date();
   const daily = [];
-  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, tokens: 0, messages: 0, sessions: 0 };
+  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, signal: 0, tokens: 0, messages: 0, sessions: 0 };
   let index = 0;
   for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
     const future = cursor > today;
@@ -89,12 +90,12 @@ function demoReport(provider) {
     const codex = future || index % 7 === 0 ? 0 : Math.round(Math.max(0, Math.cos(index * .31) - .15) * 680000);
     const tokens = provider === 'claude' ? claude : provider === 'codex' ? codex : claude + codex;
     const date = cursor.toISOString().slice(0, 10);
-    daily.push({ date, tokens, input: Math.round(tokens * .68), output: Math.round(tokens * .12), cacheRead: Math.round(tokens * .2), cacheWrite: 0, reasoning: 0, messages: tokens ? 4 : 0, sessions: tokens ? 1 : 0, providers: { claude, codex } });
-    totals.tokens += tokens; totals.input += Math.round(tokens * .68); totals.output += Math.round(tokens * .12); totals.cacheRead += Math.round(tokens * .2);
+    daily.push({ date, signal: tokens, tokens, input: Math.round(tokens * .68), output: Math.round(tokens * .12), cacheRead: Math.round(tokens * .2), cacheWrite: 0, reasoning: 0, messages: tokens ? 4 : 0, sessions: tokens ? 1 : 0, providers: { claude: { signal: claude, tokens: claude }, codex: { signal: codex, tokens: codex } } });
+    totals.tokens += tokens; totals.signal += tokens; totals.input += Math.round(tokens * .68); totals.output += Math.round(tokens * .12); totals.cacheRead += Math.round(tokens * .2);
     index += 1;
   }
-  const active = daily.filter((day) => day.tokens > 0);
-  const peakDay = active.reduce((peak, day) => !peak || day.tokens > peak.tokens ? day : peak, null);
+  const active = daily.filter((day) => day.signal > 0);
+  const peakDay = active.reduce((peak, day) => !peak || day.signal > peak.signal ? day : peak, null);
   return { schemaVersion: 1, generatedAt: new Date().toISOString(), provider, year, totals, activeDays: active.length, longestStreak: 9, peakDay, daily, sources: { claude: 0, codex: 0 } };
 }
 

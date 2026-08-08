@@ -2,6 +2,12 @@
 
 Your AI coding rhythm, visualized. Cadence reads the local usage metadata already written by Claude Code and Codex, then turns it into one GitHub-style contribution graph.
 
+## Download for Windows
+
+[**Download Cadence for Windows (x64)**](https://github.com/ndunl075/Cadence/releases/latest/download/cadence.exe)
+
+Download `cadence.exe`, open it, and Cadence will launch in your browser. Windows SmartScreen may show a warning because this early open-source build is not code-signed yet.
+
 - Claude-only heatmap in warm orange
 - Codex-only heatmap in signal blue
 - Combined view for your full agent workflow

@@ -16,8 +16,32 @@ const valueAfter = (flag, fallback) => {
 };
 const port = Number(valueAfter('--port', process.env.CADENCE_PORT || 4173));
 const host = valueAfter('--host', process.env.CADENCE_HOST || '127.0.0.1');
-const publicDir = path.join(__dirname, '..', 'public');
+const publicDir = path.resolve(__dirname, '..', 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
+
+// Cross-origin reads are off unless asked for. Without this, any page you
+// happen to be browsing could fetch http://127.0.0.1:4173/api/v1/usage and read
+// your activity. Publishing the graph deliberately is what --cors is for.
+const allowCors = args.includes('--cors');
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
+const loopbackOnly = LOOPBACK.has(host);
+
+/**
+ * A loopback bind is only as private as the Host header it answers to: a
+ * hostile domain can point its own DNS at 127.0.0.1 and reach this server with
+ * the browser still treating it as same-origin. Serve loopback binds only when
+ * the request actually addressed one.
+ */
+function trustedHost(request) {
+  if (!loopbackOnly) return true;
+  const header = String(request.headers.host || '');
+  const name = header.replace(/:\d+$/, '').replace(/^\[|\]$/, '').replace(/\]$/, '');
+  return LOOPBACK.has(name);
+}
+
+function corsHeaders() {
+  return allowCors ? { 'Access-Control-Allow-Origin': '*' } : {};
+}
 
 let snapshot = null;
 let refreshPromise = null;
@@ -47,11 +71,12 @@ function reportFrom(url, data) {
 }
 
 function json(response, status, body) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...corsHeaders() });
   response.end(JSON.stringify(body, null, 2));
 }
 
 async function handler(request, response) {
+  if (!trustedHost(request)) return json(response, 403, { error: 'Forbidden host' });
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   if (url.pathname === '/api/v1/usage') {
     const data = await refresh();
@@ -79,12 +104,21 @@ async function handler(request, response) {
       title: url.searchParams.get('title') || undefined,
       metric: url.searchParams.get('metric') || undefined,
     });
-    response.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+    response.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'no-store', ...corsHeaders() });
     return response.end(svg);
   }
-  const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+  let requested;
+  try {
+    requested = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+  } catch {
+    return json(response, 404, { error: 'Not found' }); // malformed percent-encoding
+  }
   const file = path.resolve(publicDir, requested);
-  if (!file.startsWith(path.resolve(publicDir)) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+  // path.relative is the containment test, not startsWith: "public" is a prefix
+  // of "public-secret" but not a parent of it.
+  const inside = path.relative(publicDir, file);
+  if (!inside || inside.startsWith('..') || path.isAbsolute(inside)
+      || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     return json(response, 404, { error: 'Not found' });
   }
   response.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
@@ -109,7 +143,16 @@ async function exportFiles(directory) {
 
 async function main() {
   if (args.includes('--help')) {
-    console.log('Cadence\n\n  cadence [--port 4173] [--host 127.0.0.1] [--no-open]\n  cadence --export <directory>\n');
+    console.log([
+      'Cadence',
+      '',
+      '  cadence [--port 4173] [--host 127.0.0.1] [--no-open] [--cors]',
+      '  cadence --export <directory>',
+      '',
+      '  --cors  let any website read the API. Off by default, because otherwise',
+      '          a page you are merely browsing could read your local activity.',
+      '',
+    ].join('\n'));
     return;
   }
   if (args.includes('--export')) return exportFiles(valueAfter('--export', '.'));

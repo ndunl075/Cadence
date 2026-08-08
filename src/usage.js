@@ -290,20 +290,71 @@ function summarize(days, provider = 'all', options = {}) {
   };
 }
 
+/**
+ * Both CLIs let you relocate their config directory, and a Cadence build that
+ * only knows the default paths would show an empty graph for anyone who has:
+ *
+ *   CLAUDE_CONFIG_DIR  Claude Code's explicit override (may list several dirs)
+ *   XDG_CONFIG_HOME    honoured by Claude Code on Linux
+ *   CODEX_HOME         Codex's explicit override
+ *
+ * Every candidate is probed; missing ones cost a single failed stat.
+ */
+function configDirs(value) {
+  return String(value || '').split(path.delimiter).map((dir) => dir.trim()).filter(Boolean);
+}
+
+function claudeRoots(home, env) {
+  const roots = configDirs(env.CLAUDE_CONFIG_DIR).map((dir) => path.join(dir, 'projects'));
+  roots.push(path.join(home, '.claude', 'projects'));
+  if (env.XDG_CONFIG_HOME) roots.push(path.join(env.XDG_CONFIG_HOME, 'claude', 'projects'));
+  roots.push(path.join(home, '.config', 'claude', 'projects'));
+  return roots;
+}
+
+function codexRoots(home, env) {
+  const roots = configDirs(env.CODEX_HOME).map((dir) => path.join(dir, 'sessions'));
+  roots.push(path.join(home, '.codex', 'sessions'));
+  return roots;
+}
+
+function claudeStatsCaches(home, env) {
+  const files = configDirs(env.CLAUDE_CONFIG_DIR).map((dir) => path.join(dir, 'stats-cache.json'));
+  files.push(path.join(home, '.claude', 'stats-cache.json'));
+  if (env.XDG_CONFIG_HOME) files.push(path.join(env.XDG_CONFIG_HOME, 'claude', 'stats-cache.json'));
+  files.push(path.join(home, '.config', 'claude', 'stats-cache.json'));
+  return files;
+}
+
+/**
+ * Candidate roots can overlap — CLAUDE_CONFIG_DIR is often just ~/.claude —
+ * and parsing the same transcript twice would double every figure it holds.
+ * Key on the resolved path, case-folded where the filesystem is.
+ */
+function unique(paths) {
+  const seen = new Map();
+  for (const item of paths) {
+    const resolved = path.resolve(item);
+    const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    if (!seen.has(key)) seen.set(key, item);
+  }
+  return [...seen.values()];
+}
+
 async function collect(options = {}) {
   const home = options.home || os.homedir();
+  const env = options.env || process.env;
   const roots = {
-    claude: options.claudeRoots || [path.join(home, '.config', 'claude', 'projects'), path.join(home, '.claude', 'projects')],
-    codex: options.codexRoots || [path.join(home, '.codex', 'sessions')],
+    claude: unique(options.claudeRoots || claudeRoots(home, env)),
+    codex: unique(options.codexRoots || codexRoots(home, env)),
   };
-  const statsCaches = options.statsCaches || [
-    path.join(home, '.claude', 'stats-cache.json'),
-    path.join(home, '.config', 'claude', 'stats-cache.json'),
-  ];
+  const statsCaches = unique(options.statsCaches || claudeStatsCaches(home, env));
   const days = {};
   const files = { claude: [], codex: [] };
   for (const root of roots.claude) files.claude.push(...await listJsonl(root));
   for (const root of roots.codex) files.codex.push(...await listJsonl(root));
+  files.claude = unique(files.claude);
+  files.codex = unique(files.codex);
   await Promise.all([
     ...files.claude.map((file) => parseClaudeFile(file, days)),
     ...files.codex.map((file) => parseCodexFile(file, days)),
@@ -314,4 +365,4 @@ async function collect(options = {}) {
   return { days, files: { claude: files.claude.length, codex: files.codex.length, backfilled }, roots };
 }
 
-module.exports = { blankUsage, collect, dateKey, resolveRange, summarize, tokenUsage, PROVIDERS };
+module.exports = { blankUsage, claudeRoots, claudeStatsCaches, codexRoots, collect, dateKey, resolveRange, summarize, tokenUsage, PROVIDERS };

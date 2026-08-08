@@ -102,11 +102,11 @@ html, body {
 }
 
 /* ---- title chrome (the drag handle) ---- */
-/* Window controls sit at the top-left, brand and live status at the top-right. */
+/* Brand and live status at the top-left, window controls at the top-right. */
 .chrome {
   -webkit-app-region: drag;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 13px 0 6px; height: 34px;
+  padding: 0 6px 0 13px; height: 34px;
   border-bottom: 1px solid var(--hair);
 }
 .chrome-brand { display: flex; align-items: center; gap: 12px; }

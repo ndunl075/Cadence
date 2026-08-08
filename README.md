@@ -128,7 +128,12 @@ The widget does not need a server, but one is still included for sharing:
 ```sh
 npm run server           # http://localhost:4173, no browser opened
 npm run export           # write portable JSON and SVG into ./out
+node src/server.js --cors    # allow other origins to read the API
+node src/server.js --help    # all flags
 ```
+
+The API is loopback-only and same-origin-only unless you opt out with `--cors`
+and `--host`. See [Security posture](#security-posture).
 
 ```text
 GET  /api/v1/usage?provider=all      # add ?weeks=52 or ?year=2026 to narrow
@@ -153,16 +158,97 @@ npm run build:exe
 
 The result is `dist/cadence.exe`, a portable Electron build. GitHub releases built from version tags also attach a Windows x64 executable automatically.
 
-## Data sources
+## How it works
 
-Cadence currently scans:
+Cadence has no account, no server, and no API key. Claude Code and Codex both
+already write a log of every turn to your own disk; Cadence reads those files,
+adds up the token-count fields, and draws the result. Nothing is sent anywhere.
 
-- `~/.claude/projects/**/*.jsonl`
-- `~/.config/claude/projects/**/*.jsonl`
-- `~/.codex/sessions/**/*.jsonl`
-- `~/.claude/stats-cache.json` (backfill for pruned days)
+### 1. Finding your logs
 
-The parser deduplicates repeated Claude message snapshots and derives Codex increments from cumulative token events to avoid inflated totals.
+On launch (and once a minute after), Cadence walks these locations. Anything
+missing is skipped, so you only need one of the two agents installed.
+
+**Claude Code** — first match wins, all are checked:
+
+| Path | When it applies |
+| --- | --- |
+| `$CLAUDE_CONFIG_DIR/projects` | You've set Claude Code's config override (several dirs allowed, separated by `:` on macOS/Linux or `;` on Windows) |
+| `~/.claude/projects` | The default on every platform |
+| `$XDG_CONFIG_HOME/claude/projects` | Linux, if you use XDG |
+| `~/.config/claude/projects` | Older layouts |
+
+**Codex:** `$CODEX_HOME/sessions`, then `~/.codex/sessions`.
+
+`~` is your real home directory — `C:\Users\you` on Windows. Roots that resolve
+to the same folder are collapsed, so an override pointing at the default cannot
+count your usage twice.
+
+### 2. Reading the numbers
+
+**Claude** transcripts are JSONL, one object per line. Cadence looks only at
+assistant entries carrying `message.usage`, and reads five fields:
+`input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`cache_creation_input_tokens`, and the timestamp. A streamed reply is written
+several times as it grows, so entries are deduplicated by message id, keeping
+the largest. Subagent transcripts under `subagents/` are counted — that work is
+genuinely separate and does not appear in the parent session.
+
+**Codex** rollout files report a running total per session, not per turn, so
+Cadence diffs consecutive `token_count` events to recover what each turn
+actually cost. It also compensates for a real difference between the two
+products: Anthropic reports `input_tokens` net of cache reads, Codex reports it
+gross with `cached_input_tokens` as a subset. Counting both as-is would inflate
+Codex by roughly 35x on a shared graph.
+
+### 3. Filling the gaps
+
+Claude Code prunes old transcripts, so on most machines they only reach back a
+few weeks. Cadence recovers the rest from Claude Code's own rolling aggregate at
+`stats-cache.json`, which keeps per-day token counts long after the transcripts
+are gone. Those days are marked with a hairline border and say "from stats
+cache" in the tooltip. Transcripts always win where both cover the same day.
+
+Codex has no equivalent aggregate, so its history starts at your oldest
+surviving rollout file.
+
+### What Cadence never reads
+
+Only timestamps and numeric token counts leave the parser. Prompts, responses,
+file contents, file paths, and project names are never read into a report, never
+written to disk, and never transmitted. The panel makes no network requests at
+all — you can confirm that by pulling your network cable and watching it keep
+working.
+
+The exported JSON is the whole data model, and it is dates and integers:
+
+```json
+{ "date": "2026-08-07", "signal": 309090, "tokens": 309090,
+  "providers": { "claude": { "signal": 309090 }, "codex": { "signal": 0 } } }
+```
+
+### Security posture
+
+The widget itself opens no ports and speaks to nothing. The optional server is
+built to stay private by default:
+
+- **Bound to `127.0.0.1`.** Not reachable from your network unless you pass `--host`.
+- **No cross-origin reads.** Without this, any page you happened to be browsing could `fetch` your usage off localhost. Pass `--cors` when you actually intend to publish the graph.
+- **Host header checked.** A loopback bind refuses requests addressed to any other hostname, so a hostile domain cannot point its DNS at `127.0.0.1` and read your data as same-origin.
+- **Static files are contained** to `public/`, verified against encoded and doubled traversal attempts.
+
+The Electron shell runs with `contextIsolation` on and `nodeIntegration` off,
+under a `default-src 'none'` CSP. It refuses to navigate away from its own page,
+refuses to attach webviews, and only ever hands `http(s)` URLs to the OS.
+
+These are covered by tests in `test/server.test.js`, which boot the real server
+and assert each one.
+
+### If your graph looks empty
+
+- The agent may store logs somewhere non-default — check `CLAUDE_CONFIG_DIR` and `CODEX_HOME`.
+- Codex only started writing rollout files in recent versions; older installs have nothing to read.
+- Run `npm run server` and open `/api/v1/status`, which reports how many session files were found for each provider.
 
 ## Inspiration
 

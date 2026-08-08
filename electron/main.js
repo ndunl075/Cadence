@@ -151,10 +151,20 @@ function createWidget() {
   widget.on('closed', () => { clearTimeout(revealTimer); clearTimeout(saveTimer); widget = null; });
 
   // Links in the panel open in the real browser, never inside the widget.
+  // openExternal is only ever handed http(s); handing it an arbitrary scheme
+  // (file:, ms-msdt:, …) is a known path to running something locally.
   widget.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  // The panel is a fixed local page. Nothing should ever navigate it elsewhere,
+  // so a navigation attempt means something has gone wrong — refuse it rather
+  // than let the renderer end up somewhere with a preload bridge attached.
+  widget.webContents.on('will-navigate', (event, url) => {
+    if (url !== widget.webContents.getURL()) event.preventDefault();
+  });
+  widget.webContents.on('will-attach-webview', (event) => event.preventDefault());
 
   return widget;
 }

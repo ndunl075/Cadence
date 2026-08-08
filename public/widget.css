@@ -378,6 +378,38 @@ body[data-provider="all"] .ramp-claude,
 body[data-provider="all"] .ramp-codex,
 body[data-provider="all"] .ramp-cursor { display: flex; }
 
+/* ---- usage bars ---- */
+/* How hard each agent has been worked in the last five hours and the last seven
+   days. Codex publishes a real percentage of its own limit; the other two are
+   measured against your own busiest window, which the title spells out. */
+.bars {
+  display: grid; gap: 3px;
+  padding: 2px 13px 7px 35px;
+  font-size: 7px; letter-spacing: .1em; color: var(--faint);
+}
+.bars-head, .bar-row { display: grid; grid-template-columns: 44px 1fr 1fr; gap: 6px; align-items: center; }
+.bars-head span { text-align: left; }
+.bars-head span:not(:first-child) { padding-left: 1px; color: var(--label); }
+.bar-row > b { font-weight: 600; color: var(--label-strong); letter-spacing: .1em; }
+.bar {
+  position: relative; height: 4px; border-radius: 2px;
+  background: var(--well-deep); overflow: hidden;
+}
+.bar > i {
+  position: absolute; inset: 0 auto 0 0;
+  border-radius: 2px; background: var(--cell-4);
+  transition: width .45s cubic-bezier(.2, .8, .3, 1);
+}
+/* A published limit is a harder fact than a personal record, so it reads as a
+   solid bar; the record-relative ones are softened. */
+.bar[data-basis="record"] > i { opacity: .62; }
+.bar-row[data-provider="claude"] { --cell-4: var(--claude-4); }
+.bar-row[data-provider="codex"] { --cell-4: var(--codex-4); }
+.bar-row[data-provider="cursor"] { --cell-4: var(--cursor-4); }
+
+.bar-switches { display: flex; align-items: center; gap: 5px; }
+.bar-switches span { font-size: 7px; letter-spacing: .1em; color: var(--label); margin-right: 3px; }
+
 /* The reference line: the same number the readout shows, in units a person can
    actually picture. Click to cycle to a different yardstick. */
 .flavour {

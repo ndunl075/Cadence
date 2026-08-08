@@ -1,7 +1,7 @@
 {
   "name": "cadence-ai",
-  "version": "0.3.0",
-  "description": "A local-first desktop widget charting your Claude Code and Codex rhythm.",
+  "version": "0.4.0",
+  "description": "A local-first desktop widget and CLI charting your Claude Code, Codex and Cursor rhythm.",
   "license": "MIT",
   "private": true,
   "main": "electron/main.js",

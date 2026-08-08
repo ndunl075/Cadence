@@ -63,6 +63,12 @@
       </span>
     </div>
 
+    <!-- How hard each agent has been worked lately: a rolling five hours and a
+         rolling seven days. Rows are built by the script from the settings. -->
+    <div class="bars" id="bars" hidden>
+      <div class="bars-head" aria-hidden="true"><span></span><span>5H</span><span>7D</span></div>
+    </div>
+
     <footer class="readout">
       <button id="metric" class="metric-cell" title="Switch between input+output and cache-inclusive totals">
         <b id="total">—</b><span id="total-label">SIGNAL</span>
@@ -111,6 +117,18 @@
           <div class="choice" role="radiogroup" aria-label="Headline metric" data-setting="metric">
             <button role="radio" data-value="signal" aria-checked="true">SIGNAL</button>
             <button role="radio" data-value="tokens" aria-checked="false">TOTAL</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-text"><b>Usage bars</b><small>Last 5 hours and last 7 days, per agent.</small></div>
+          <div class="bar-switches">
+            <button class="switch" role="switch" data-setting="barClaude" aria-checked="false" aria-label="Claude usage bar"><i></i></button>
+            <span>CLAUDE</span>
+            <button class="switch" role="switch" data-setting="barCodex" aria-checked="false" aria-label="Codex usage bar"><i></i></button>
+            <span>CODEX</span>
+            <button class="switch" role="switch" data-setting="barCursor" aria-checked="false" aria-label="Cursor usage bar"><i></i></button>
+            <span>CURSOR</span>
           </div>
         </div>
 

@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { collect, dateKey, resolveRange, summarize, tokenUsage } = require('../src/usage');
+const { collect, dateKey, resolveRange, summarize, tokenUsage, windows } = require('../src/usage');
 
 async function fixture() {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cadence-test-'));
@@ -44,7 +44,17 @@ test('deduplicates Claude message snapshots and differences Codex cumulative tot
   ].map(JSON.stringify).join('\n'));
   await fs.promises.writeFile(path.join(codex, 'rollout.jsonl'), [
     { type: 'event_msg', timestamp: '2026-01-02T13:00:00Z', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } } } },
-    { type: 'event_msg', timestamp: '2026-01-02T13:01:00Z', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 150, output_tokens: 30, total_tokens: 180 } } } },
+    {
+      type: 'event_msg', timestamp: '2026-01-02T13:01:00Z', payload: {
+        type: 'token_count',
+        info: { total_token_usage: { input_tokens: 150, output_tokens: 30, total_tokens: 180 } },
+        rate_limits: {
+          plan_type: 'plus',
+          primary: { window_minutes: 300, used_percent: 42, resets_at: 1767376800 },
+          secondary: { window_minutes: 10080, used_percent: 78, resets_at: 1767981600 },
+        },
+      },
+    },
   ].map(JSON.stringify).join('\n'));
 
   const result = await collect({ claudeRoots: [claude], codexRoots: [codex], statsCaches: [], cursorStores: [] });
@@ -54,7 +64,45 @@ test('deduplicates Claude message snapshots and differences Codex cumulative tot
   assert.equal(day.providers.codex.signal, 180);
   assert.equal(day.signal, 202);
   assert.equal(day.providers.codex.tokens, 180, 'both metrics ride along per provider');
+  assert.equal(result.hours.get(Math.floor(new Date('2026-01-02T12:00:01Z').getTime() / 3600000)).claude, 22);
+  assert.equal(result.hours.get(Math.floor(new Date('2026-01-02T13:01:00Z').getTime() / 3600000)).codex, 180);
+  assert.deepEqual(result.limits.codex.map(({ windowMinutes, usedPercent, plan }) => ({ windowMinutes, usedPercent, plan })), [
+    { windowMinutes: 300, usedPercent: 42, plan: 'plus' },
+    { windowMinutes: 10080, usedPercent: 78, plan: 'plus' },
+  ]);
   assert.deepEqual(result.files, { claude: 1, codex: 1, cursor: 0, backfilled: 0 });
+});
+
+test('reports rolling usage against personal records and live Codex limits', () => {
+  const now = new Date('2026-01-10T12:30:00Z');
+  const end = Math.floor(now.getTime() / 3600000);
+  const hours = new Map([
+    [end, { claude: 25, codex: 5, cursor: 0 }],
+    [end - (8 * 24), { claude: 100, codex: 50, cursor: 0 }],
+  ]);
+  const limits = { codex: [
+    { windowMinutes: 300, usedPercent: 42, resetsAt: now.getTime() + 3600000, plan: 'plus' },
+    { windowMinutes: 10080, usedPercent: 78, resetsAt: now.getTime() + 86400000, plan: 'plus' },
+  ] };
+
+  const report = windows(hours, { now, limits });
+  assert.deepEqual(report.session.claude, { current: 25, best: 100, basis: 'record', percent: 25 });
+  assert.deepEqual(report.week.claude, { current: 25, best: 100, basis: 'record', percent: 25 });
+  assert.equal(report.session.codex.percent, 42);
+  assert.equal(report.session.codex.basis, 'limit');
+  assert.equal(report.week.codex.percent, 78);
+  assert.deepEqual(report.week.codex.limit, { resetsAt: now.getTime() + 86400000, plan: 'plus' });
+});
+
+test('ignores a Codex limit reading after its reset', () => {
+  const now = new Date('2026-01-10T12:30:00Z');
+  const end = Math.floor(now.getTime() / 3600000);
+  const report = windows(new Map([[end, { claude: 0, codex: 10, cursor: 0 }]]), {
+    now,
+    limits: { codex: [{ windowMinutes: 300, usedPercent: 99, resetsAt: now.getTime() - 1 }] },
+  });
+  assert.equal(report.session.codex.basis, 'record');
+  assert.equal(report.session.codex.percent, 100);
 });
 
 test('backfills pruned days from the Claude stats cache without overwriting transcripts', async () => {

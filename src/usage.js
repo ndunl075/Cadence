@@ -109,7 +109,33 @@ function ensureDay(days, key) {
   return days[key];
 }
 
-async function parseClaudeFile(file, days) {
+const HOUR = 3600000;
+// The rolling windows the usage bars report on: Claude Code's own session
+// window, and a week.
+const WINDOWS = { session: 5, week: 24 * 7 };
+
+/**
+ * The graph only needs a day's total, but "how much have I run in the last five
+ * hours" needs finer grain, so turns are also tallied into hour buckets as they
+ * are parsed. Sparse by construction — only hours you actually worked exist.
+ * Days recovered from the stats cache have no clock time in them at all and so
+ * never appear here, which is fine: they are weeks old by the time they are
+ * backfilled, and both windows are far shorter than that.
+ */
+function hourIndex(timestamp) {
+  const value = timestamp instanceof Date ? timestamp.getTime() : new Date(timestamp).getTime();
+  return Number.isNaN(value) ? null : Math.floor(value / HOUR);
+}
+
+function addHour(hours, timestamp, provider, signal) {
+  const index = hourIndex(timestamp);
+  if (index === null || !signal) return;
+  let bucket = hours.get(index);
+  if (!bucket) hours.set(index, bucket = { claude: 0, codex: 0, cursor: 0 });
+  bucket[provider] += signal;
+}
+
+async function parseClaudeFile(file, days, hours) {
   const messages = new Map();
   const activeDays = new Set();
   let lineNumber = 0;
@@ -123,18 +149,24 @@ async function parseClaudeFile(file, days) {
     const id = entry?.message?.id || entry?.requestId || `${file}:${lineNumber}`;
     const key = `${day}:${id}`;
     const previous = messages.get(key);
-    if (!previous || usage.tokens > previous.tokens) messages.set(key, usage);
+    // The clock time rides along with the usage so the winning snapshot of a
+    // streamed reply lands in the right hour bucket, not just the right day.
+    if (!previous || usage.tokens > previous.usage.tokens) messages.set(key, { usage, timestamp: entry.timestamp });
   });
-  for (const [key, usage] of messages) add(ensureDay(days, key.slice(0, 10)).claude, usage);
+  for (const [key, record] of messages) {
+    add(ensureDay(days, key.slice(0, 10)).claude, record.usage);
+    if (hours) addHour(hours, record.timestamp, 'claude', record.usage.signal);
+  }
   for (const day of activeDays) ensureDay(days, day).claude.sessions += 1;
 }
 
-async function parseCodexFile(file, days) {
+async function parseCodexFile(file, days, hours, limits) {
   const activeDays = new Set();
   let previousTotal = blankUsage();
   await readLines(file, (entry) => {
     const day = dateKey(entry?.timestamp);
     if (!day || entry?.type !== 'event_msg' || entry?.payload?.type !== 'token_count') return;
+    if (limits && entry.payload.rate_limits) noteCodexLimits(limits, entry.payload.rate_limits, entry.timestamp);
     const info = entry.payload.info;
     if (!info) return;
     let usage;
@@ -152,9 +184,41 @@ async function parseCodexFile(file, days) {
       if (!usage.tokens) return;
     } else return;
     add(ensureDay(days, day).codex, usage);
+    if (hours) addHour(hours, entry.timestamp, 'codex', usage.signal);
     activeDays.add(day);
   });
   for (const day of activeDays) ensureDay(days, day).codex.sessions += 1;
+}
+
+/**
+ * Codex is the only one of the three that writes down how close you are to your
+ * limit: every `token_count` event carries a `rate_limits` block with the real
+ * percentage used, the window it applies to, and when it resets. Claude Code
+ * records nothing comparable — a 429 shows up in a transcript only once you have
+ * already hit it — and Cursor records nothing at all, so their bars are scaled
+ * against your own record instead.
+ *
+ * Readings are kept per window length, newest wins, because a rollout file from
+ * last week describes a window that has long since reset.
+ */
+function noteCodexLimits(limits, block, timestamp) {
+  const observedAt = new Date(timestamp).getTime();
+  if (!Number.isFinite(observedAt)) return;
+  for (const slot of ['primary', 'secondary']) {
+    const entry = block?.[slot];
+    const minutes = number(entry?.window_minutes);
+    if (!entry || !minutes) continue;
+    const previous = limits.get(minutes);
+    if (previous && previous.observedAt >= observedAt) continue;
+    limits.set(minutes, {
+      windowMinutes: minutes,
+      usedPercent: number(entry.used_percent),
+      // Seconds in the file, milliseconds everywhere in Cadence.
+      resetsAt: number(entry.resets_at) * 1000 || null,
+      plan: typeof block.plan_type === 'string' ? block.plan_type : null,
+      observedAt,
+    });
+  }
 }
 
 /**
@@ -258,11 +322,12 @@ function readCursorStore(file) {
  * Claude, and a Cursor day reads high against a Claude day. Counted as
  * reported, and said plainly in the README rather than silently scaled.
  */
-function parseCursorStore(file, days, seen, chats) {
+function parseCursorStore(file, days, seen, chats, hours) {
   const chatDays = new Set();
   for (const record of readCursorStore(file)) {
     if (seen.has(record.id)) continue;
     seen.add(record.id);
+    if (hours) addHour(hours, record.timestamp, 'cursor', record.input + record.output);
     const day = dateKey(record.timestamp);
     if (!day) continue;
     const usage = blankUsage();
@@ -309,6 +374,66 @@ async function parseClaudeStatsCache(file, days) {
     backfilled += 1;
   }
   return backfilled;
+}
+
+/**
+ * What each provider has run in the last five hours and the last seven days,
+ * and the most it has ever run in a window of that length. The record is the
+ * only full mark available for Claude and Cursor — neither publishes a limit —
+ * so a bar reads "this week is 70% of your busiest week" rather than pretending
+ * to know an allowance. Codex's real limit rides alongside in `limits`.
+ *
+ * Both windows end at the current hour, so the newest bucket is partial; that
+ * is the same partial hour you are living in, which is what you want to see.
+ */
+function windows(hours, options = {}) {
+  const now = options.now ? new Date(options.now) : new Date();
+  const endHour = Math.floor(now.getTime() / HOUR);
+  const indices = [...hours.keys()].filter((index) => index <= endHour);
+  const report = {};
+  for (const [name, span] of Object.entries(WINDOWS)) {
+    const totals = { hours: span };
+    for (const provider of PROVIDERS) totals[provider] = { current: 0, best: 0 };
+    if (indices.length) {
+      const first = Math.min(...indices);
+      // A dense array over the recorded span, so the sliding window is one pass.
+      // Reach back far enough to cover the oldest window and no further.
+      const start = Math.min(first, endHour - span + 1);
+      const size = endHour - start + 1;
+      for (const provider of PROVIDERS) {
+        let running = 0;
+        let best = 0;
+        for (let offset = 0; offset < size; offset += 1) {
+          running += hours.get(start + offset)?.[provider] || 0;
+          const leaving = offset - span;
+          if (leaving >= 0) running -= hours.get(start + leaving)?.[provider] || 0;
+          if (running > best) best = running;
+        }
+        totals[provider] = { current: windowSum(hours, endHour - span + 1, endHour, provider), best };
+      }
+    }
+    // A published limit beats the home-made yardstick wherever one exists, but
+    // only while it is still live: a reading whose window has already reset
+    // describes an allowance that has since been handed back.
+    for (const provider of PROVIDERS) {
+      const reading = (options.limits?.[provider] || [])
+        .find((entry) => entry.windowMinutes === span * 60 && (!entry.resetsAt || entry.resetsAt > now.getTime()));
+      const slot = totals[provider];
+      slot.basis = reading ? 'limit' : 'record';
+      slot.percent = reading
+        ? Math.max(0, Math.min(100, reading.usedPercent))
+        : (slot.best > 0 ? Math.round((slot.current / slot.best) * 100) : 0);
+      if (reading) slot.limit = { resetsAt: reading.resetsAt, plan: reading.plan };
+    }
+    report[name] = totals;
+  }
+  return report;
+}
+
+function windowSum(hours, from, to, provider) {
+  let total = 0;
+  for (let index = from; index <= to; index += 1) total += hours.get(index)?.[provider] || 0;
+  return total;
 }
 
 function mergeProvider(day) {
@@ -493,26 +618,34 @@ async function collect(options = {}) {
   };
   const statsCaches = unique(options.statsCaches || claudeStatsCaches(home, env));
   const days = {};
+  const hours = new Map();
+  const codexLimits = new Map();
   const files = { claude: [], codex: [] };
   for (const root of roots.claude) files.claude.push(...await listJsonl(root));
   for (const root of roots.codex) files.codex.push(...await listJsonl(root));
   files.claude = unique(files.claude);
   files.codex = unique(files.codex);
   await Promise.all([
-    ...files.claude.map((file) => parseClaudeFile(file, days)),
-    ...files.codex.map((file) => parseCodexFile(file, days)),
+    ...files.claude.map((file) => parseClaudeFile(file, days, hours)),
+    ...files.codex.map((file) => parseCodexFile(file, days, hours, codexLimits)),
   ]);
   // Cursor keeps one store rather than a file per session, so its count is
   // chats rather than files — the useful number when checking it was found.
   const seenTurns = new Set();
   const chats = new Set();
   for (const store of roots.cursor) {
-    if (fs.existsSync(store)) parseCursorStore(store, days, seenTurns, chats);
+    if (fs.existsSync(store)) parseCursorStore(store, days, seenTurns, chats, hours);
   }
   // Backfill runs last so it can defer to any day the transcripts already proved.
   let backfilled = 0;
   for (const cache of statsCaches) backfilled += await parseClaudeStatsCache(cache, days);
-  return { days, files: { claude: files.claude.length, codex: files.codex.length, cursor: chats.size, backfilled }, roots };
+  return {
+    days,
+    hours,
+    limits: { codex: [...codexLimits.values()].sort((a, b) => a.windowMinutes - b.windowMinutes) },
+    files: { claude: files.claude.length, codex: files.codex.length, cursor: chats.size, backfilled },
+    roots,
+  };
 }
 
-module.exports = { blankUsage, claudeRoots, claudeStatsCaches, codexRoots, collect, cursorStores, dateKey, resolveRange, summarize, tokenUsage, PROVIDERS };
+module.exports = { blankUsage, claudeRoots, claudeStatsCaches, codexRoots, collect, cursorStores, dateKey, resolveRange, summarize, tokenUsage, windows, PROVIDERS, WINDOWS };

@@ -14,6 +14,9 @@ const settings = {
   scanSeconds: 60,
   launchAtLogin: false,
   rotateComparisons: true,
+  barClaude: false,
+  barCodex: false,
+  barCursor: false,
   pinned: true,
   metric: 'signal',
   provider: 'all',
@@ -93,6 +96,68 @@ function buildMonths(daily, offset, weeks) {
   months.replaceChildren(fragment);
 }
 
+const BAR_PROVIDERS = [
+  ['claude', 'CLAUDE', 'barClaude'],
+  ['codex', 'CODEX', 'barCodex'],
+  ['cursor', 'CURSOR', 'barCursor'],
+];
+
+function untilReset(resetsAt) {
+  const remaining = resetsAt - Date.now();
+  if (!(remaining > 0)) return null;
+  const hours = Math.floor(remaining / 3600000);
+  return hours >= 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : `${hours}h ${Math.round((remaining % 3600000) / 60000)}m`;
+}
+
+/**
+ * A row per enabled provider: how much it has run in the last five hours and
+ * the last seven days. Codex is the only one that publishes where its own limit
+ * sits, so its bar is a real percentage of that; the other two are measured
+ * against your own busiest window of the same length, and the hover text says
+ * which of the two you are looking at rather than leaving it to be assumed.
+ */
+function renderBars(report) {
+  const host = $('#bars');
+  const data = report.windows;
+  const rows = BAR_PROVIDERS.filter(([provider, , setting]) => settings[setting]
+    // Nothing has ever been recorded for this agent, so a row of zeroes would
+    // only take up height. Turning the switch on cannot conjure data.
+    && (data?.session?.[provider]?.best || data?.week?.[provider]?.best
+      || data?.session?.[provider]?.current || data?.week?.[provider]?.current));
+  host.hidden = !data || !rows.length;
+  if (host.hidden) return;
+
+  const fragment = document.createDocumentFragment();
+  for (const [provider, label] of rows) {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.dataset.provider = provider;
+    const name = document.createElement('b');
+    name.textContent = label;
+    row.append(name);
+    for (const window of ['session', 'week']) {
+      const slot = data[window]?.[provider] || { current: 0, best: 0, percent: 0, basis: 'record' };
+      const bar = document.createElement('span');
+      bar.className = 'bar';
+      bar.dataset.basis = slot.basis;
+      const fill = document.createElement('i');
+      fill.style.width = `${Math.max(slot.percent > 0 ? 2 : 0, slot.percent)}%`;
+      bar.append(fill);
+      const span = window === 'session' ? 'last 5 hours' : 'last 7 days';
+      bar.title = slot.basis === 'limit'
+        ? `${label} · ${slot.percent}% of your ${window === 'session' ? 'session' : 'weekly'} limit`
+          + `${slot.limit?.resetsAt && untilReset(slot.limit.resetsAt) ? `, resets in ${untilReset(slot.limit.resetsAt)}` : ''}`
+          + `\n${full.format(slot.current)} tokens in the ${span}`
+        : `${label} · ${full.format(slot.current)} tokens in the ${span}`
+          + `\n${slot.percent}% of your busiest ${span.replace('last ', '')} (${full.format(slot.best)})`
+          + '\nNo published limit to measure against, so this is your own record.';
+      row.append(bar);
+    }
+    fragment.append(row);
+  }
+  host.replaceChildren(host.firstElementChild, fragment);
+}
+
 /** Draw the current reference line, restarting its swap animation each time. */
 function renderFlavour() {
   const list = state.report?.comparisons?.[state.metric] || [];
@@ -155,6 +220,7 @@ function render(report) {
   $('#span').textContent = `${dayLabel(report.range.from).toUpperCase()} — ${dayLabel(report.range.to).toUpperCase()}`;
 
   renderFlavour();
+  renderBars(report);
   $('#total-label').textContent = METRICS[metric].label;
   const backfill = report.backfilledDays
     ? `\n${report.backfilledDays} day(s) backfilled from Claude Code's stats cache`
@@ -225,6 +291,7 @@ function paintControls() {
  *  and the OS can refuse the login item outright. */
 function adopt(next) {
   const metricChanged = next.metric !== settings.metric;
+  const barsChanged = BAR_PROVIDERS.some(([, , key]) => key in next && next[key] !== settings[key]);
   Object.assign(settings, next);
   applyTheme(settings.theme);
   paintControls();
@@ -234,6 +301,8 @@ function adopt(next) {
   if (metricChanged) {
     state.metric = settings.metric;
     if (state.report) render(state.report); // both metrics are already in the payload
+  } else if (barsChanged && state.report) {
+    renderBars(state.report); // the windows are in the payload too; no refetch
   }
 }
 
@@ -395,6 +464,20 @@ function demoReport(provider) {
     range: { from: daily[0].date, to: daily[daily.length - 1].date },
     totals, activeDays: active.length, backfilledDays: 24, longestStreak: 9,
     peakDay: null, daily, sources: { claude: 0, codex: 0, cursor: 0, backfilled: 0 },
+    windows: {
+      session: {
+        hours: 5,
+        claude: { current: 148000, best: 210000, percent: 70, basis: 'record' },
+        codex: { current: 21000, best: 190000, percent: 11, basis: 'record' },
+        cursor: { current: 0, best: 160000, percent: 0, basis: 'record' },
+      },
+      week: {
+        hours: 168,
+        claude: { current: 2100000, best: 2600000, percent: 81, basis: 'record' },
+        codex: { current: 940000, best: 1900000, percent: 49, basis: 'limit', limit: { resetsAt: Date.now() + 2 * 86400000, plan: 'plus' } },
+        cursor: { current: 1250000, best: 3000000, percent: 42, basis: 'record' },
+      },
+    },
     comparisons: {
       signal: ['~4 runs through the Harry Potter series', '~5 passes through all of Shakespeare'],
       tokens: ['~32 runs through the Harry Potter series', '~39 passes through all of Shakespeare'],

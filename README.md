@@ -11,6 +11,7 @@ Download `cadence.exe` and open it. The widget tucks into the top-left corner of
 - Frameless panel that stays on top, drag it anywhere by its header
 - Remembers its position, size, pinned state, metric, and provider between launches
 - One agent on its own, or all three combined with each day coloured by whichever did more of it
+- Optional per-agent 5-hour and 7-day usage bars, each independently enabled
 - Month labels and a full date range, with per-day figures on hover
 - A reference line that puts your total in human units — *~2,063 runs through the Harry Potter series*
 - Rescans local logs every minute; click the timestamp to rescan now
@@ -128,6 +129,7 @@ sheet before it minimizes the window.
 | **Appearance** | Dark *(default)*, Light, System | Repaints the panel. System follows Windows and switches live when you do. |
 | **Rescan logs** | 30s, 1m *(default)*, 5m, 15m | How often transcripts are re-read. Longer intervals touch the disk less. |
 | **Headline metric** | Signal *(default)*, Total | Same switch as clicking the bottom-left figure. |
+| **Usage bars** | Claude, Codex, Cursor; all off by default | Independently show each agent's rolling 5-hour and 7-day usage below the graph. |
 | **Keep on top** | on *(default)* | Same as the pin button; the two stay in sync. |
 | **Start with Windows** | off *(default)* | Registers Cadence as a login item. |
 | **Cycle comparisons** | on *(default)* | Turn off to stop the reference line rotating by itself. |
@@ -137,6 +139,24 @@ and never leave the machine. The main process is what actually holds them: the
 panel sends a patch, the main process clamps every value to a known option,
 applies it, and sends back what really took effect — so the sheet shows the true
 state even when the OS refuses something, such as a login item blocked by policy.
+
+### Usage bars and limits
+
+Each usage-bar switch adds one compact row below the graph: **5H** is the
+rolling five hours ending now, and **7D** is the rolling seven days. The rows
+are off by default so the graph keeps the full panel height until you ask for
+them.
+
+Codex rollout files include the real percentage used, window length and reset
+time for the account's active rate limits. When a live Codex reading matches a
+5-hour or 7-day window, Cadence uses that published percentage and shows the
+reset countdown on hover.
+
+Claude Code and Cursor do not persist an equivalent allowance locally. Their
+bars therefore compare the current window with your busiest recorded window of
+the same length: 70% means the last five hours or seven days used 70% as many
+signal tokens as your personal record. Hover text states whether a bar is based
+on a published limit or a personal record; Cadence never guesses a plan limit.
 
 Light mode is a re-grounded panel rather than an inversion. Both heatmap ramps
 are re-cut to run pale to saturated, so density still reads as weight on paper
@@ -346,7 +366,9 @@ Cadence diffs consecutive `token_count` events to recover what each turn
 actually cost. It also compensates for a real difference between the two
 products: Anthropic reports `input_tokens` net of cache reads, Codex reports it
 gross with `cached_input_tokens` as a subset. Counting both as-is would inflate
-Codex by roughly 35x on a shared graph.
+Codex by roughly 35x on a shared graph. The same events can carry Codex's
+published primary and secondary rate-limit percentages; Cadence retains the
+newest live reading for each window for the optional usage bars.
 
 **Cursor** stores each chat turn as a row in the `cursorDiskKV` table, keyed
 `bubbleId:<chat>:<turn>`, holding a JSON blob. Two fields out of that blob are
@@ -372,6 +394,11 @@ cache" in the tooltip. Transcripts always win where both cover the same day.
 Neither Codex nor Cursor keeps an equivalent aggregate. Codex's history starts
 at your oldest surviving rollout file; Cursor's reaches as far back as the chats
 still in its store, which is usually further, because it prunes nothing.
+
+The heatmap uses daily totals, while the optional usage bars also keep sparse
+hour buckets in memory for their rolling 5-hour and 7-day calculations. These
+buckets are rebuilt from the same local timestamps on every scan and are never
+written out by Cadence.
 
 ### What Cadence never reads
 

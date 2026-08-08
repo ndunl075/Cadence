@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } = require('electron');
-const { collect, summarize, PROVIDERS } = require('../src/usage');
+const { collect, summarize, windows, PROVIDERS } = require('../src/usage');
 const { comparisons } = require('../src/comparisons');
 const { isCliInvocation, run: runCli } = require('../src/cli');
 
@@ -57,6 +57,12 @@ function normalizeSettings(saved) {
     scanSeconds: SCAN_SECONDS.includes(saved.scanSeconds) ? saved.scanSeconds : 60,
     launchAtLogin: saved.launchAtLogin === true,
     rotateComparisons: saved.rotateComparisons !== false,
+    // One switch per provider, so you can watch the agent you actually pay for
+    // without the other two taking up panel height. Off unless asked for: the
+    // graph is what the panel is, and each row costs height the graph had.
+    barClaude: saved.barClaude === true,
+    barCodex: saved.barCodex === true,
+    barCursor: saved.barCursor === true,
     pinned: saved.pinned !== false,
     metric: saved.metric === 'tokens' ? 'tokens' : 'signal',
     provider: PROVIDERS.includes(saved.provider) ? saved.provider : 'all',
@@ -147,6 +153,9 @@ async function report(provider) {
       signal: comparisons(summary.totals.signal),
       tokens: comparisons(summary.totals.tokens),
     },
+    // The bars answer "how am I doing right now", so they are always the live
+    // rolling windows, never the window the graph happens to be showing.
+    windows: windows(data.hours, { limits: data.limits }),
     sources: data.files,
     refreshedAt: new Date(refreshedAt).toISOString(),
   };

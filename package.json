@@ -1,0 +1,21 @@
+{
+  "name": "cadence-ai",
+  "version": "0.1.0",
+  "description": "A local-first contribution graph for Claude Code and Codex.",
+  "license": "MIT",
+  "private": true,
+  "bin": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js --no-open",
+    "test": "node --test",
+    "build:exe": "pkg . --targets node22-win-x64 --output dist/cadence.exe"
+  },
+  "pkg": {
+    "assets": ["public/**/*"],
+    "outputPath": "dist"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.5.1"
+  }
+}

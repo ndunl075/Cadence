@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cadence turns Claude Code and Codex usage into a local-first contribution graph.">
+  <title>Cadence — your agent rhythm</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Cadence home">
+      <span class="brand-mark"><i></i><i></i><i></i><i></i></span>
+      <span>CADENCE</span>
+    </a>
+    <div class="live"><span></span><b>LOCAL SIGNAL</b><span id="updated">SCANNING</span></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow"><span>01</span> Your agent rhythm, recorded</div>
+      <h1>See the work<br><em>behind the work.</em></h1>
+      <p>One private contribution graph for every token you run through Claude Code and Codex. No prompts leave your machine. No account required.</p>
+      <div class="source-readout" aria-label="Detected local sources">
+        <div><span class="source-dot claude"></span><b id="claude-files">—</b><small>Claude sessions</small></div>
+        <div><span class="source-dot codex"></span><b id="codex-files">—</b><small>Codex sessions</small></div>
+      </div>
+    </section>
+
+    <section class="board" aria-labelledby="graph-title">
+      <div class="board-head">
+        <div>
+          <span class="section-number">02 / ACTIVITY</span>
+          <h2 id="graph-title">Contribution signal</h2>
+        </div>
+        <div class="filters" role="group" aria-label="Filter provider">
+          <button class="active" data-provider="all"><span class="split-dot"></span>Combined</button>
+          <button data-provider="claude"><span class="source-dot claude"></span>Claude</button>
+          <button data-provider="codex"><span class="source-dot codex"></span>Codex</button>
+        </div>
+      </div>
+
+      <div class="heatmap-shell">
+        <div class="month-row" id="months" aria-hidden="true"></div>
+        <div class="heatmap-layout">
+          <div class="weekdays" aria-hidden="true"><span>M</span><span>W</span><span>F</span></div>
+          <div class="heatmap" id="heatmap" role="grid" aria-label="Daily token usage"></div>
+        </div>
+        <div class="legend"><span>QUIET</span><i></i><i></i><i></i><i></i><i></i><span>LOUD</span></div>
+      </div>
+
+      <div class="metrics">
+        <article><span>Total tokens</span><strong id="tokens">—</strong><small id="token-mix">across both agents</small></article>
+        <article><span>Active days</span><strong id="active-days">—</strong><small>this calendar year</small></article>
+        <article><span>Longest streak</span><strong id="streak">—</strong><small>consecutive days</small></article>
+        <article><span>Peak signal</span><strong id="peak">—</strong><small id="peak-date">no activity yet</small></article>
+      </div>
+    </section>
+
+    <section class="export-panel">
+      <div>
+        <span class="section-number">03 / SHARE</span>
+        <h2>Your graph, anywhere.</h2>
+        <p>Drop the live SVG into a README, or consume the same data as plain JSON. Both endpoints expose counts only—never prompts, files, or code.</p>
+      </div>
+      <div class="code-stack">
+        <label>README SVG <button data-copy="svg">COPY</button></label>
+        <code id="svg-code">![Cadence](http://localhost:4173/api/v1/heatmap.svg)</code>
+        <label>JSON API <button data-copy="json">COPY</button></label>
+        <code id="json-code">http://localhost:4173/api/v1/usage?provider=all</code>
+      </div>
+    </section>
+  </main>
+
+  <footer><span>CADENCE / OPEN SOURCE</span><span>THE DATA STAYS HOME</span><span id="year">2026</span></footer>
+  <div class="tooltip" id="tooltip" role="tooltip"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

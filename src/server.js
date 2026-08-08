@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const http = require('node:http');
+const path = require('node:path');
+const { execFile } = require('node:child_process');
+const { collect, summarize, PROVIDERS } = require('./usage');
+const { renderSvg } = require('./svg');
+
+const args = process.argv.slice(2);
+const valueAfter = (flag, fallback) => {
+  const index = args.indexOf(flag);
+  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
+};
+const port = Number(valueAfter('--port', process.env.CADENCE_PORT || 4173));
+const host = valueAfter('--host', process.env.CADENCE_HOST || '127.0.0.1');
+const publicDir = path.join(__dirname, '..', 'public');
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
+
+let snapshot = null;
+let refreshPromise = null;
+let refreshedAt = 0;
+
+async function refresh(force = false) {
+  if (!force && snapshot && Date.now() - refreshedAt < 30000) return snapshot;
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = collect().then((data) => {
+    snapshot = data;
+    refreshedAt = Date.now();
+    return data;
+  }).finally(() => { refreshPromise = null; });
+  return refreshPromise;
+}
+
+function reportFrom(url, data) {
+  const requested = url.searchParams.get('provider') || 'all';
+  const provider = PROVIDERS.includes(requested) ? requested : 'all';
+  const year = Number(url.searchParams.get('year')) || new Date().getFullYear();
+  return summarize(data.days, provider, year);
+}
+
+function json(response, status, body) {
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+  response.end(JSON.stringify(body, null, 2));
+}
+
+async function handler(request, response) {
+  const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+  if (url.pathname === '/api/v1/usage') {
+    const data = await refresh();
+    return json(response, 200, { ...reportFrom(url, data), sources: data.files });
+  }
+  if (url.pathname === '/api/v1/status') {
+    const data = await refresh();
+    return json(response, 200, { ok: true, sources: data.files, refreshedAt: new Date(refreshedAt).toISOString(), privacy: 'Local metadata only. Prompts and source code are never read into reports.' });
+  }
+  if (url.pathname === '/api/v1/refresh' && request.method === 'POST') {
+    const data = await refresh(true);
+    return json(response, 200, { ok: true, sources: data.files, refreshedAt: new Date(refreshedAt).toISOString() });
+  }
+  if (url.pathname === '/api/v1/heatmap.svg') {
+    const data = await refresh();
+    const svg = renderSvg(reportFrom(url, data), { title: url.searchParams.get('title') || undefined });
+    response.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+    return response.end(svg);
+  }
+  const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+  const file = path.resolve(publicDir, requested);
+  if (!file.startsWith(path.resolve(publicDir)) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    return json(response, 404, { error: 'Not found' });
+  }
+  response.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+  fs.createReadStream(file).pipe(response);
+}
+
+function openBrowser(url) {
+  const command = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  execFile(command[0], command[1], { windowsHide: true }, () => {});
+}
+
+async function exportFiles(directory) {
+  const data = await refresh(true);
+  await fs.promises.mkdir(directory, { recursive: true });
+  for (const provider of ['all', ...PROVIDERS]) {
+    const report = summarize(data.days, provider, new Date().getFullYear());
+    await fs.promises.writeFile(path.join(directory, `cadence-${provider}.json`), JSON.stringify(report, null, 2));
+    await fs.promises.writeFile(path.join(directory, `cadence-${provider}.svg`), renderSvg(report));
+  }
+  console.log(`Exported JSON and SVG files to ${path.resolve(directory)}`);
+}
+
+async function main() {
+  if (args.includes('--help')) {
+    console.log('Cadence\n\n  cadence [--port 4173] [--host 127.0.0.1] [--no-open]\n  cadence --export <directory>\n');
+    return;
+  }
+  if (args.includes('--export')) return exportFiles(valueAfter('--export', '.'));
+  await refresh(true);
+  const server = http.createServer((request, response) => handler(request, response).catch((error) => json(response, 500, { error: error.message })));
+  server.listen(port, host, () => {
+    const url = `http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`;
+    console.log(`Cadence is running at ${url}`);
+    console.log(`Found ${snapshot.files.claude} Claude and ${snapshot.files.codex} Codex session files.`);
+    if (!args.includes('--no-open')) openBrowser(url);
+  });
+  setInterval(() => refresh(true).catch(() => {}), 60000).unref();
+}
+
+main().catch((error) => { console.error(error); process.exitCode = 1; });

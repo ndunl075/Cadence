@@ -27,6 +27,7 @@ Window controls sit at the top-left; the live indicator and wordmark at the top-
 | Close | top-left | Quit Cadence |
 | Minimize | top-left | Send to the taskbar (or `Esc`) |
 | Pin | top-left | Toggle always-on-top; the pin tilts and dims when off |
+| Settings | top-left | Open the settings sheet (or `Ctrl+,`) |
 | Timestamp | top-right | Force an immediate rescan (or `Ctrl+R`) |
 | Provider row | below header | Switch between combined, Claude, and Codex |
 | Bottom-left figure | readout | Switch between SIGNAL and TOTAL (see below) |
@@ -34,6 +35,31 @@ Window controls sit at the top-left; the live indicator and wordmark at the top-
 
 Drag the header to move the panel and any edge to resize. Cells scale to fit the
 width, so a wider panel shows a larger graph rather than more empty space.
+
+### Settings
+
+The gear opens a sheet over the graph. It stops below the title bar, so the pin,
+minimize and quit buttons stay reachable while it is open; `Esc` backs out of the
+sheet before it minimizes the window.
+
+| Setting | Options | Effect |
+| --- | --- | --- |
+| **Appearance** | System *(default)*, Light, Dark | Repaints the panel. System follows Windows and switches live when you do. |
+| **Rescan logs** | 30s, 1m *(default)*, 5m, 15m | How often transcripts are re-read. Longer intervals touch the disk less. |
+| **Headline metric** | Signal *(default)*, Total | Same switch as clicking the bottom-left figure. |
+| **Keep on top** | on *(default)* | Same as the pin button; the two stay in sync. |
+| **Start with Windows** | off *(default)* | Registers Cadence as a login item. |
+| **Cycle comparisons** | on *(default)* | Turn off to stop the reference line rotating by itself. |
+
+Settings are stored in `widget-state.json` in Electron's per-user data directory
+and never leave the machine. The main process is what actually holds them: the
+panel sends a patch, the main process clamps every value to a known option,
+applies it, and sends back what really took effect — so the sheet shows the true
+state even when the OS refuses something, such as a login item blocked by policy.
+
+Light mode is a re-grounded panel rather than an inversion. Both heatmap ramps
+are re-cut to run pale to saturated, so density still reads as weight on paper
+the way it reads as glow on the dark panel.
 
 ### Reading the colours
 
@@ -57,10 +83,11 @@ Claude-only days. The legend shows both ramps in this view, one per provider,
 and the tooltip bolds whichever side led that day.
 
 Lightness increases strictly across every ramp, so a busier day is never darker
-than a quieter one. Peak days carry a soft glow in their own hue, and days
-backfilled from the stats cache get a hairline border so you can tell measured
-days from reconstructed ones. The SVG endpoint applies the same per-day
-ownership rule.
+than a quieter one. Peak days carry a soft glow in their own hue. Every cell is
+a single flat colour — days backfilled from the stats cache used to carry a
+hairline border, but a long backfilled stretch ringed every square and broke the
+flat colour the graph is read by, so that distinction lives in the tooltip
+instead. The SVG endpoint applies the same per-day ownership rule.
 
 ## Two ways to count
 
@@ -239,7 +266,16 @@ built to stay private by default:
 
 The Electron shell runs with `contextIsolation` on and `nodeIntegration` off,
 under a `default-src 'none'` CSP. It refuses to navigate away from its own page,
-refuses to attach webviews, and only ever hands `http(s)` URLs to the OS.
+refuses to attach webviews, and only ever hands `http(s)` URLs to the OS. The
+renderer is treated as the untrusted side of the bridge: every setting it sends
+is clamped to a known value in the main process before anything reaches disk or
+the OS.
+
+CI actions are pinned to full commit SHAs rather than tags. A tag is a mutable
+pointer — whoever controls an action's repository can retarget `v4` at new code,
+and that code then runs in our workflow with our token. The release job holds
+`contents: write`, so it is the one that would hurt; the workflow now grants that
+permission only to the job that needs it, and the repository default is read-only.
 
 These are covered by tests in `test/server.test.js`, which boot the real server
 and assert each one.

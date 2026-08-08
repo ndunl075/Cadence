@@ -7,6 +7,18 @@ const bridge = window.cadence || null;
 
 const state = { provider: 'all', metric: 'signal', report: null, busy: false, flavour: 0 };
 
+// Mirrors what the main process has on disk. Defaults match its own, so the
+// panel still behaves sanely when it is opened in a browser with no bridge.
+const settings = {
+  theme: 'system',
+  scanSeconds: 60,
+  launchAtLogin: false,
+  rotateComparisons: true,
+  pinned: true,
+  metric: 'signal',
+  provider: 'all',
+};
+
 // `signal` is fresh input + output. `tokens` adds cache reads and writes, which
 // on a heavy Claude Code workload is ~97% of the volume — a real number, just a
 // very different one. The panel shows whichever the user picked last.
@@ -170,11 +182,89 @@ async function load(provider = state.provider, force = false) {
   }
 }
 
+/* ---- settings ---- */
+
+const systemDark = matchMedia('(prefers-color-scheme: dark)');
+
+/**
+ * Resolve `system` here rather than leaning on a media query in the stylesheet,
+ * so the CSS only ever deals in two concrete themes and the browser demo picks
+ * the same one the packaged app would.
+ */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme =
+    theme === 'light' || theme === 'dark' ? theme : (systemDark.matches ? 'dark' : 'light');
+}
+systemDark.addEventListener('change', () => {
+  if (settings.theme === 'system') applyTheme('system');
+});
+
+function paintControls() {
+  document.querySelectorAll('.choice').forEach((group) => {
+    const chosen = String(settings[group.dataset.setting]);
+    group.querySelectorAll('button').forEach((button) => {
+      button.setAttribute('aria-checked', String(button.dataset.value === chosen));
+    });
+  });
+  document.querySelectorAll('.switch').forEach((toggle) => {
+    toggle.setAttribute('aria-checked', String(settings[toggle.dataset.setting] === true));
+  });
+}
+
+/** Adopt whatever the main process says is now in effect — never the optimistic
+ *  value the click asked for, since main clamps anything it does not recognise
+ *  and the OS can refuse the login item outright. */
+function adopt(next) {
+  const metricChanged = next.metric !== settings.metric;
+  Object.assign(settings, next);
+  applyTheme(settings.theme);
+  paintControls();
+  pin.setAttribute('aria-pressed', String(settings.pinned));
+  pin.title = settings.pinned ? 'Keep on top' : 'Not on top';
+  if (next.version) $('#settings-version').textContent = `CADENCE v${next.version}`;
+  if (metricChanged) {
+    state.metric = settings.metric;
+    if (state.report) render(state.report); // both metrics are already in the payload
+  }
+}
+
+async function save(patch) {
+  adopt(bridge ? await bridge.saveSettings(patch) : { ...settings, ...patch });
+}
+
+const sheet = $('#settings');
+const sheetOpen = $('#settings-open');
+
+function showSettings(open) {
+  sheet.hidden = !open;
+  sheetOpen.setAttribute('aria-expanded', String(open));
+  (open ? $('#settings-close') : sheetOpen).focus();
+}
+
+sheetOpen.addEventListener('click', () => showSettings(sheet.hidden));
+$('#settings-close').addEventListener('click', () => showSettings(false));
+
+document.querySelectorAll('.choice').forEach((group) => {
+  group.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    const raw = button.dataset.value;
+    save({ [group.dataset.setting]: group.hasAttribute('data-number') ? Number(raw) : raw });
+  });
+});
+
+document.querySelectorAll('.switch').forEach((toggle) => {
+  toggle.addEventListener('click', () => {
+    save({ [toggle.dataset.setting]: toggle.getAttribute('aria-checked') !== 'true' });
+  });
+});
+
 /* ---- interactions ---- */
 
 document.querySelectorAll('.segments button').forEach((button) => {
   button.addEventListener('click', () => {
     if (button.dataset.provider === state.provider) return;
+    settings.provider = button.dataset.provider;
     if (bridge) bridge.setProvider(button.dataset.provider);
     load(button.dataset.provider);
   });
@@ -185,17 +275,16 @@ $('#flavour').addEventListener('click', () => {
   renderFlavour();
 });
 
-// Rotate on its own so the panel stays alive to glance at.
+// Rotate on its own so the panel stays alive to glance at — unless the user has
+// asked it to hold still.
 setInterval(() => {
-  if (document.hidden) return;
+  if (document.hidden || !settings.rotateComparisons) return;
   state.flavour += 1;
   renderFlavour();
 }, 9000);
 
 $('#metric').addEventListener('click', () => {
-  state.metric = state.metric === 'signal' ? 'tokens' : 'signal';
-  if (bridge) bridge.setMetric(state.metric);
-  if (state.report) render(state.report); // both metrics are already in the payload
+  save({ metric: state.metric === 'signal' ? 'tokens' : 'signal' });
 });
 
 $('#scan').addEventListener('click', () => load(state.provider, true));
@@ -203,12 +292,7 @@ $('#minimize').addEventListener('click', () => bridge && bridge.minimize());
 $('#close').addEventListener('click', () => bridge && bridge.close());
 
 const pin = $('#pin');
-pin.addEventListener('click', async () => {
-  const next = pin.getAttribute('aria-pressed') !== 'true';
-  pin.setAttribute('aria-pressed', String(next));
-  pin.title = next ? 'Keep on top' : 'Not on top';
-  if (bridge) await bridge.setPinned(next);
-});
+pin.addEventListener('click', () => save({ pinned: pin.getAttribute('aria-pressed') !== 'true' }));
 
 const tip = $('#tip');
 $('#grid').addEventListener('pointerover', (event) => {
@@ -251,7 +335,13 @@ addEventListener('resize', () => {
 });
 
 addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') return bridge && bridge.minimize();
+  // Escape backs out of the sheet first; it only reaches the window once the
+  // panel is already showing the graph.
+  if (event.key === 'Escape') {
+    if (!sheet.hidden) return showSettings(false);
+    return bridge && bridge.minimize();
+  }
+  if (event.key === ',' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); showSettings(sheet.hidden); }
   if (event.key === 'r' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); load(state.provider, true); }
 });
 
@@ -297,14 +387,7 @@ function demoReport(provider) {
 }
 
 (async () => {
-  let provider = 'all';
-  if (bridge) {
-    const saved = await bridge.state();
-    provider = saved.provider || 'all';
-    state.metric = METRICS[saved.metric] ? saved.metric : 'signal';
-    pin.setAttribute('aria-pressed', String(saved.pinned));
-    pin.title = saved.pinned ? 'Keep on top' : 'Not on top';
-    bridge.onTick(() => load(state.provider));
-  }
-  await load(provider);
+  adopt(bridge ? await bridge.settings() : settings);
+  if (bridge) bridge.onTick(() => load(state.provider));
+  await load(settings.provider);
 })();

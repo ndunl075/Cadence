@@ -1,11 +1,7 @@
+/* Two themes, one token set. The renderer always stamps a resolved
+   `data-theme="light"|"dark"` on <html> — never "system" — so this file never
+   has to ask the OS anything, and the browser demo behaves like the app. */
 :root {
-  --ink: #f0eee9;
-  --muted: #7d838f;
-  --dim: #5d636e;
-  --panel: #101318;
-  --panel-top: #171b21;
-  --line: #262b33;
-  --hair: #1d2128;
   /* Palette taken from the products themselves rather than approximated.
    *
    * Claude — Anthropic's `--orange-*` scale and `--clay`, read out of the
@@ -15,52 +11,140 @@
    *          extension. blue-900 and blue-400 are exact; the two intermediate
    *          steps are interpolated at the same hue so the ramp stays blue the
    *          whole way up.
+   *
+   * The ramps live here as named scales so a theme redefines each one once;
+   * the selectors further down only ever point --cell-* at them.
    */
   --claude: #d97757;  /* Anthropic --clay / CLAWD_PAL body */
   --codex: #0285ff;   /* Codex --blue-400 */
+  /* Claude: Anthropic --orange-750 / -550 / -450 / -350, ending on the most
+     saturated true orange in their scale. */
+  --claude-1: #4b1b08; --claude-2: #993d19; --claude-3: #c25124; --claude-4: #eb6834;
+  --claude-glow: rgba(235, 104, 52, .65);
+  /* Codex: deep navy up to bright sky, all on Codex's own blue hue. */
+  --codex-1: #00284d; --codex-2: #0257a7; --codex-3: #0285ff; --codex-4: #70baff;
+  --codex-glow: rgba(2, 133, 255, .6);
+
+  --ink: #f0eee9;
+  --ink-soft: #b9bfc9;
+  --muted: #8b919c;
+  --dim: #5d636e;
+  --label: #656b76;
+  --label-strong: #868d99;
+  --faint: #4e545e;
+
+  --panel: #101318;
+  --panel-top: #171b21;
+  --line: #262b33;
+  --hair: #1d2128;
+  --active: #262c36;
+  --well: rgba(0, 0, 0, .3);
+  --well-deep: rgba(0, 0, 0, .4);
+  --raise: rgba(255, 255, 255, .07);
+  --raise-soft: rgba(255, 255, 255, .045);
+  --lip: rgba(255, 255, 255, .06);
+  --edge: rgba(240, 238, 233, .5);
+
   --live: #5bdd93;
+  --stale: #d8a24a;
+  --danger-bg: rgba(224, 92, 74, .18);
+  --danger-ink: #ff9d90;
+
+  --tip-bg: #f0eee9;
+  --tip-ink: #14171c;
+  --tip-muted: #6a707c;
+  --tip-claude: #a83f16;
+  --tip-codex: #5b21c9;
+
+  --cell-0: #1a1e25;
+  --bezel-shadow: 0 22px 48px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .35);
+  --bezel-lip: rgba(255, 255, 255, .05);
+  --wash-claude: rgba(217, 119, 87, .14);
+  --wash-codex: rgba(2, 133, 255, .12);
+
   /* Default ramp is Claude's; the combined view overrides it per cell to
      whichever provider actually did the work that day. */
-  --cell-0: #1a1e25;
-  --cell-1: #4b1b08;
-  --cell-2: #993d19;
-  --cell-3: #c25124;
-  --cell-4: #eb6834;
-  --glow: rgba(235, 104, 52, .6);
+  --cell-1: var(--claude-1);
+  --cell-2: var(--claude-2);
+  --cell-3: var(--claude-3);
+  --cell-4: var(--claude-4);
+  --glow: var(--claude-glow);
+
   --mono: "Cascadia Mono", "SFMono-Regular", ui-monospace, Consolas, monospace;
   --cell: 9px;
   --gap: 2px;
 }
 
-/* Claude: Anthropic --orange-750 / -550 / -450 / -350, ending on the most
-   saturated true orange in their scale. */
-.ramp-claude, body[data-provider="claude"] {
-  --cell-1: #4b1b08; --cell-2: #993d19; --cell-3: #c25124; --cell-4: #eb6834;
-  --glow: rgba(235, 104, 52, .65);
-}
-/* Codex: deep navy up to bright sky, all on Codex's own blue hue. */
-.ramp-codex, body[data-provider="codex"] {
-  --cell-1: #00284d; --cell-2: #0257a7; --cell-3: #0285ff; --cell-4: #70baff;
-  --glow: rgba(2, 133, 255, .6);
+/* Light is a re-grounded panel, not an inversion: warm paper instead of a dark
+   rack face, and both ramps re-cut to run pale → saturated so density still
+   reads as weight rather than as glow. */
+:root[data-theme="light"] {
+  --claude-1: #f7dbcb; --claude-2: #eda87f; --claude-3: #dd7443; --claude-4: #b8491b;
+  --claude-glow: rgba(184, 73, 27, .3);
+  --codex-1: #d3e6ff; --codex-2: #8ec1ff; --codex-3: #2f92f5; --codex-4: #0058b0;
+  --codex-glow: rgba(0, 88, 176, .26);
+
+  --ink: #16191e;
+  --ink-soft: #3f4650;
+  --muted: #6b7280;
+  --dim: #868d98;
+  --label: #8d93a0;
+  --label-strong: #6d7480;
+  --faint: #a2a8b2;
+
+  --panel: #ece8e0;
+  --panel-top: #faf8f4;
+  --line: #cfc9bd;
+  --hair: #ddd7cb;
+  --active: #ffffff;
+  --well: rgba(0, 0, 0, .045);
+  --well-deep: rgba(0, 0, 0, .075);
+  --raise: rgba(0, 0, 0, .06);
+  --raise-soft: rgba(0, 0, 0, .035);
+  --lip: rgba(0, 0, 0, .05);
+  --edge: rgba(22, 25, 30, .45);
+
+  --live: #17a34a;
+  --stale: #b7791f;
+  --danger-bg: rgba(200, 40, 25, .12);
+  --danger-ink: #b3271a;
+
+  --tip-bg: #14171c;
+  --tip-ink: #f0eee9;
+  --tip-muted: #98a0ac;
+  --tip-claude: #f0a583;
+  --tip-codex: #8cc2ff;
+
+  --cell-0: #ded8cc;
+  --bezel-shadow: 0 18px 40px rgba(58, 48, 38, .18), 0 2px 6px rgba(58, 48, 38, .12);
+  --bezel-lip: rgba(255, 255, 255, .85);
+  --wash-claude: rgba(217, 119, 87, .16);
+  --wash-codex: rgba(2, 133, 255, .1);
 }
 
+.ramp-claude,
+body[data-provider="claude"],
+body[data-provider="all"] .cell[data-owner="claude"] {
+  --cell-1: var(--claude-1); --cell-2: var(--claude-2);
+  --cell-3: var(--claude-3); --cell-4: var(--claude-4);
+  --glow: var(--claude-glow);
+}
 /* In the combined view a day is painted in the colours of whichever provider
    did more of that day's work, so the graph shows *who* as well as *how much*.
    Custom properties resolve per element, so re-declaring the ramp on the cell
    is all it takes. */
-body[data-provider="all"] .cell[data-owner="claude"] {
-  --cell-1: #4b1b08; --cell-2: #993d19; --cell-3: #c25124; --cell-4: #eb6834;
-  --glow: rgba(235, 104, 52, .65);
-}
+.ramp-codex,
+body[data-provider="codex"],
 body[data-provider="all"] .cell[data-owner="codex"] {
-  --cell-1: #00284d; --cell-2: #0257a7; --cell-3: #0285ff; --cell-4: #70baff;
-  --glow: rgba(2, 133, 255, .6);
+  --cell-1: var(--codex-1); --cell-2: var(--codex-2);
+  --cell-3: var(--codex-3); --cell-4: var(--codex-4);
+  --glow: var(--codex-glow);
 }
 
 * { box-sizing: border-box; }
 
 :focus { outline: none; }
-:focus-visible { outline: 1px solid rgba(240, 238, 233, .45); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 1px solid var(--edge); outline-offset: 2px; border-radius: 4px; }
 
 html, body {
   height: 100%;
@@ -85,12 +169,9 @@ html, body {
   border: 1px solid var(--line);
   background:
     linear-gradient(180deg, var(--panel-top), var(--panel) 42%),
-    radial-gradient(120% 80% at 88% -10%, rgba(217, 119, 87, .14), transparent 60%),
-    radial-gradient(110% 90% at 6% 108%, rgba(2, 133, 255, .12), transparent 62%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .05),
-    0 22px 48px rgba(0, 0, 0, .5),
-    0 2px 8px rgba(0, 0, 0, .35);
+    radial-gradient(120% 80% at 88% -10%, var(--wash-claude), transparent 60%),
+    radial-gradient(110% 90% at 6% 108%, var(--wash-codex), transparent 62%);
+  box-shadow: inset 0 1px 0 var(--bezel-lip), var(--bezel-shadow);
   overflow: hidden;
   animation: settle .42s cubic-bezier(.2, .8, .3, 1) both;
 }
@@ -100,6 +181,8 @@ html, body {
   position: absolute; inset: 0; z-index: 5; opacity: .04; pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
 }
+/* Grain is a dark-panel effect; on paper it just reads as dirt. */
+:root[data-theme="light"] .grain { opacity: .025; }
 
 /* ---- title chrome (the drag handle) ---- */
 /* Brand and live status at the top-left, window controls at the top-right. */
@@ -128,12 +211,16 @@ html, body {
   transition: color .14s ease, background .14s ease;
 }
 .icon svg { width: 13px; height: 13px; fill: currentColor; transition: transform .14s ease, opacity .14s ease; }
-.icon:hover { background: rgba(255, 255, 255, .07); color: var(--ink); }
-.icon.danger:hover { background: rgba(224, 92, 74, .18); color: #ff9d90; }
+.icon:hover { background: var(--raise); color: var(--ink); }
+.icon.danger:hover { background: var(--danger-bg); color: var(--danger-ink); }
 /* Pinned is the default, so the affordance shows the *un*pinned state instead:
    the pin tilts loose and dims when the panel stops floating. */
 .icon[aria-pressed="true"] { color: var(--claude); }
 .icon[aria-pressed="false"] svg { opacity: .5; transform: rotate(38deg); }
+/* The gear turns a quarter-turn while the sheet is open, so the button reads as
+   a state and not just another way in. */
+#settings-open[aria-expanded="true"] { color: var(--ink); background: var(--raise); }
+#settings-open[aria-expanded="true"] svg { transform: rotate(90deg); }
 
 /* ---- provider rail ---- */
 .rail {
@@ -141,15 +228,15 @@ html, body {
   display: flex; align-items: center;
   gap: 10px; padding: 9px 13px 7px;
 }
-.segments { -webkit-app-region: no-drag; display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: rgba(0, 0, 0, .3); border: 1px solid var(--hair); }
+.segments { -webkit-app-region: no-drag; display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: var(--well); border: 1px solid var(--hair); }
 .segments button {
   display: flex; align-items: center; gap: 5px;
   border: 0; border-radius: 4px; background: transparent; cursor: pointer;
   color: var(--dim); font: 600 8.5px var(--mono); letter-spacing: .11em;
   padding: 5px 8px; transition: color .14s ease, background .14s ease;
 }
-.segments button:hover { color: #b9bfc9; }
-.segments button.active { color: var(--ink); background: #262c36; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06); }
+.segments button:hover { color: var(--ink-soft); }
+.segments button.active { color: var(--ink); background: var(--active); box-shadow: inset 0 1px 0 var(--lip); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
 .dot.claude { background: var(--claude); }
 .dot.codex { background: var(--codex); }
@@ -161,11 +248,11 @@ html, body {
   color: var(--dim); font: 500 8.5px var(--mono); letter-spacing: .1em; padding: 4px 2px;
   transition: color .14s ease;
 }
-.status:hover { color: #b9bfc9; }
+.status:hover { color: var(--ink-soft); }
 .pulse { width: 5px; height: 5px; border-radius: 50%; background: var(--live); box-shadow: 0 0 9px var(--live); animation: breathe 2.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 body.busy .pulse { animation-duration: .7s; }
-body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
+body.stale .pulse { background: var(--stale); box-shadow: 0 0 9px var(--stale); }
 
 /* ---- heatmap ---- */
 /* Centred so any height the user drags in distributes above and below the grid
@@ -173,7 +260,7 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
 .plot { display: flex; gap: 6px; padding: 2px 13px 0; min-height: 0; align-items: center; }
 .weekdays {
   display: grid; grid-template-rows: repeat(7, var(--cell)); gap: var(--gap);
-  width: 9px; margin-top: 14px; color: #4e545e; font-size: 7px; line-height: var(--cell);
+  width: 9px; margin-top: 14px; color: var(--faint); font-size: 7px; line-height: var(--cell);
 }
 .weekdays span:nth-child(1) { grid-row: 2; }
 .weekdays span:nth-child(2) { grid-row: 4; }
@@ -191,10 +278,10 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
 .months {
   display: grid; grid-auto-flow: column; grid-auto-columns: var(--cell); gap: var(--gap);
   width: max-content; height: 13px; align-items: center;
-  color: #656b76; font-size: 7px; letter-spacing: .1em;
+  color: var(--label); font-size: 7px; letter-spacing: .1em;
 }
 .months span { white-space: nowrap; overflow: visible; }
-.months span.year { color: #868d99; }
+.months span.year { color: var(--label-strong); }
 .cell {
   width: var(--cell); height: var(--cell); border-radius: 1.5px;
   background: var(--cell-0);
@@ -208,14 +295,15 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
 .cell[data-level="3"] { background: var(--cell-3); }
 /* The busiest days actually burn. */
 .cell[data-level="4"] { background: var(--cell-4); box-shadow: 0 0 5px var(--glow); }
-/* Backfilled days come from Claude Code's stats cache, not a transcript. Same
-   scale, lower confidence — marked with a hairline rather than a colour shift. */
-.cell[data-backfilled="1"] { box-shadow: inset 0 0 0 1px rgba(240, 238, 233, .26); }
-/* A backfilled day can also be a peak day — keep the hairline and the glow. */
-.cell[data-level="4"][data-backfilled="1"] { box-shadow: inset 0 0 0 1px rgba(240, 238, 233, .3), 0 0 5px var(--glow); }
-.cell[data-today="1"] { outline-color: rgba(240, 238, 233, .5); outline-offset: 1px; }
+/* Backfilled days come from Claude Code's stats cache rather than a transcript.
+   That used to be drawn as a hairline inside the cell, but a long backfilled
+   stretch put a ring around every square and broke the flat colour the graph is
+   read by. The distinction lives in the tooltip instead. */
+.cell[data-today="1"] { outline-color: var(--edge); outline-offset: 1px; }
 .cell:hover { transform: scale(1.5); filter: brightness(1.3); }
 .grid:hover .cell:not(:hover) { filter: saturate(.65); }
+/* Brightening a pale cell on paper washes it out; darken it instead. */
+:root[data-theme="light"] .cell:hover { filter: brightness(.88); }
 
 /* ---- readout ---- */
 .readout {
@@ -225,7 +313,7 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
 .readout div, .readout .metric-cell { padding: 9px 6px 8px 13px; min-width: 0; }
 .readout > * + * { border-left: 1px solid var(--hair); padding-left: 11px; }
 .readout b { display: block; font-size: 15px; font-weight: 400; letter-spacing: -.045em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.readout span { display: block; margin-top: 3px; color: #565c66; font-size: 7.5px; letter-spacing: .13em; }
+.readout span { display: block; margin-top: 3px; color: var(--faint); font-size: 7.5px; letter-spacing: .13em; }
 
 /* The headline metric is a control, not a label — clicking it swaps the whole
    graph between input+output and cache-inclusive totals. */
@@ -233,15 +321,15 @@ body.stale .pulse { background: #d8a24a; box-shadow: 0 0 9px #d8a24a; }
   border: 0; background: transparent; color: inherit; font: inherit; text-align: left;
   cursor: pointer; border-radius: 0 0 0 11px; transition: background .14s ease;
 }
-.metric-cell:hover { background: rgba(255, 255, 255, .045); }
-.metric-cell:hover span { color: #8b919c; }
+.metric-cell:hover { background: var(--raise-soft); }
+.metric-cell:hover span { color: var(--muted); }
 .metric-cell span::after { content: ' ⇄'; opacity: 0; transition: opacity .14s ease; }
 .metric-cell:hover span::after { opacity: .8; }
 
 .caption {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 7px 13px 8px 35px;
-  color: #4b515b; font-size: 7px; letter-spacing: .1em; white-space: nowrap;
+  color: var(--faint); font-size: 7px; letter-spacing: .1em; white-space: nowrap;
 }
 .legend { display: flex; align-items: center; gap: 8px; }
 .ramp { display: flex; align-items: center; gap: 3px; }
@@ -263,13 +351,13 @@ body[data-provider="all"] .ramp-codex { display: flex; }
    actually picture. Click to cycle to a different yardstick. */
 .flavour {
   display: flex; align-items: center; gap: 6px; width: 100%;
-  border: 0; border-top: 1px solid var(--hair); background: rgba(0, 0, 0, .22);
+  border: 0; border-top: 1px solid var(--hair); background: var(--well);
   padding: 7px 13px 8px; cursor: pointer; text-align: left;
-  color: #6f7683; font: inherit; font-size: 8.5px; letter-spacing: .04em;
+  color: var(--label); font: inherit; font-size: 8.5px; letter-spacing: .04em;
   border-radius: 0 0 11px 11px;
   transition: color .16s ease, background .16s ease;
 }
-.flavour:hover { color: #aab1bc; background: rgba(0, 0, 0, .34); }
+.flavour:hover { color: var(--ink-soft); background: var(--well-deep); }
 .flavour-mark { color: var(--claude); font-size: 10px; line-height: 1; }
 #flavour-text {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -277,20 +365,86 @@ body[data-provider="all"] .ramp-codex { display: flex; }
 }
 @keyframes swap { from { opacity: 0; transform: translateY(3px); } }
 
+/* ---- settings sheet ---- */
+/* Covers the panel instead of opening a second window, so the bezel, the drag
+   handle and the rounded corners all still belong to one surface. It stops
+   below the title chrome so the pin, minimize and quit buttons stay reachable
+   and the gear stays visible as a toggle. */
+.sheet {
+  position: absolute; inset: 34px 0 0; z-index: 6;
+  display: grid; grid-template-rows: auto 1fr auto;
+  border-radius: 0 0 11px 11px;
+  background:
+    linear-gradient(180deg, var(--panel-top), var(--panel) 46%),
+    radial-gradient(120% 70% at 92% -12%, var(--wash-claude), transparent 62%);
+  animation: sheet-in .2s cubic-bezier(.2, .8, .3, 1) both;
+}
+.sheet[hidden] { display: none; }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(8px); } }
+
+.sheet-head {
+  -webkit-app-region: drag;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 6px 0 13px; height: 34px;
+  border-bottom: 1px solid var(--hair);
+}
+.sheet-title { font-size: 10px; font-weight: 600; letter-spacing: .22em; }
+.sheet-head .icon { -webkit-app-region: no-drag; }
+
+.sheet-body { overflow-y: auto; padding: 2px 13px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.sheet-body::-webkit-scrollbar { width: 6px; }
+.sheet-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+.field {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 0;
+}
+.field + .field { border-top: 1px solid var(--hair); }
+.field-text { min-width: 0; }
+.field-text b { display: block; font-size: 9px; font-weight: 500; letter-spacing: .06em; }
+.field-text small { display: block; margin-top: 3px; color: var(--faint); font-size: 7.5px; letter-spacing: .04em; }
+
+/* Same segmented control as the provider rail, so the sheet reads as the same
+   instrument rather than a settings dialog bolted on. */
+.choice { display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: var(--well); border: 1px solid var(--hair); flex: none; }
+.choice button {
+  border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+  color: var(--dim); font: 600 8px var(--mono); letter-spacing: .1em;
+  padding: 5px 7px; transition: color .14s ease, background .14s ease;
+}
+.choice button:hover { color: var(--ink-soft); }
+.choice button[aria-checked="true"] { color: var(--ink); background: var(--active); box-shadow: inset 0 1px 0 var(--lip); }
+
+.switch {
+  flex: none; width: 30px; height: 17px; padding: 2px;
+  border: 1px solid var(--hair); border-radius: 999px; background: var(--well);
+  cursor: pointer; transition: background .16s ease, border-color .16s ease;
+}
+.switch i { display: block; width: 11px; height: 11px; border-radius: 50%; background: var(--dim); transition: transform .16s cubic-bezier(.2, .8, .3, 1), background .16s ease; }
+.switch[aria-checked="true"] { background: var(--claude); border-color: var(--claude); }
+.switch[aria-checked="true"] i { transform: translateX(13px); background: #fff; }
+
+.sheet-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border-top: 1px solid var(--hair); background: var(--well);
+  padding: 7px 13px 8px; border-radius: 0 0 11px 11px;
+  color: var(--faint); font-size: 7px; letter-spacing: .1em; white-space: nowrap;
+}
+
 .tip {
   position: absolute; z-index: 10; pointer-events: none;
   padding: 6px 8px; border-radius: 4px;
-  background: #f0eee9; color: #14171c;
+  background: var(--tip-bg); color: var(--tip-ink);
   font-size: 8.5px; line-height: 1.5; letter-spacing: .02em;
   box-shadow: 0 8px 22px rgba(0, 0, 0, .5);
   white-space: nowrap;
 }
 .tip b { display: block; font-size: 10px; letter-spacing: -.02em; }
 .tip b.lead { display: inline; font-size: inherit; letter-spacing: inherit; }
-.tip i { font-style: normal; color: #6a707c; }
-/* Same two hues, darkened for the light tooltip ground. */
-.tip .c { color: #a83f16; }
-.tip .x { color: #5b21c9; }
+.tip i { font-style: normal; color: var(--tip-muted); }
+/* Same two hues, re-cut for whichever ground the tooltip is sitting on. */
+.tip .c { color: var(--tip-claude); }
+.tip .x { color: var(--tip-codex); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

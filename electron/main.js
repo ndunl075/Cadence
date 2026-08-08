@@ -2,9 +2,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, Menu, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } = require('electron');
 const { collect, summarize, PROVIDERS } = require('../src/usage');
 const { comparisons } = require('../src/comparisons');
+
+const THEMES = ['system', 'light', 'dark'];
+// Offered as a fixed set rather than a free number so the renderer cannot ask
+// for a one-second poll and spin the disk scanning transcripts.
+const SCAN_SECONDS = [30, 60, 300, 900];
 
 // Sized to the panel's natural content height so the grid is not marooned above
 // a band of empty bezel; the user can still drag it larger.
@@ -16,6 +21,7 @@ let statePath = null;
 let snapshot = null;
 let refreshPromise = null;
 let refreshedAt = 0;
+let tickTimer = null;
 
 function readState() {
   try { return JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch { return {}; }
@@ -25,6 +31,56 @@ function writeState(patch) {
   const next = { ...readState(), ...patch };
   try { fs.writeFileSync(statePath, JSON.stringify(next, null, 2)); } catch { /* non-fatal */ }
   return next;
+}
+
+/**
+ * Every setting the panel can touch, filtered to a known value. The renderer is
+ * the only caller, but it is still the untrusted side of the bridge — anything
+ * that reaches disk or the OS goes through here first, so a bad payload falls
+ * back to the default instead of being stored.
+ */
+function normalizeSettings(saved) {
+  return {
+    theme: THEMES.includes(saved.theme) ? saved.theme : 'system',
+    scanSeconds: SCAN_SECONDS.includes(saved.scanSeconds) ? saved.scanSeconds : 60,
+    launchAtLogin: saved.launchAtLogin === true,
+    rotateComparisons: saved.rotateComparisons !== false,
+    pinned: saved.pinned !== false,
+    metric: saved.metric === 'tokens' ? 'tokens' : 'signal',
+    provider: PROVIDERS.includes(saved.provider) ? saved.provider : 'all',
+  };
+}
+
+/** Rescan on the user's chosen cadence, telling the panel to redraw each time. */
+function scheduleScans(seconds) {
+  clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    refresh(true)
+      .then(() => widget && !widget.isDestroyed() && widget.webContents.send('cadence:tick'))
+      .catch(() => {});
+  }, seconds * 1000);
+}
+
+/**
+ * Push settings out to the things that actually implement them. Reads the login
+ * item back from the OS rather than trusting the write, so a policy-blocked or
+ * failed registration shows up in the panel as off instead of silently lying.
+ */
+function applySettings(settings) {
+  nativeTheme.themeSource = settings.theme;
+  if (widget && !widget.isDestroyed()) widget.setAlwaysOnTop(settings.pinned, 'floating');
+  scheduleScans(settings.scanSeconds);
+  try {
+    app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: [] });
+    settings.launchAtLogin = app.getLoginItemSettings().openAtLogin === true;
+  } catch {
+    settings.launchAtLogin = false; // unsupported or blocked on this platform
+  }
+  return settings;
+}
+
+function currentSettings() {
+  return { ...normalizeSettings(readState()), version: app.getVersion() };
 }
 
 /**
@@ -176,28 +232,22 @@ ipcMain.handle('cadence:refresh', async (_event, provider) => {
   return report(provider);
 });
 
-ipcMain.handle('cadence:pin', (_event, pinned) => {
-  const next = Boolean(pinned);
-  if (widget) widget.setAlwaysOnTop(next, 'floating');
-  writeState({ pinned: next });
-  return next;
+ipcMain.handle('cadence:settings', () => currentSettings());
+
+/**
+ * Accepts a partial patch, but stores only the normalized whole — so an unknown
+ * key is dropped and an out-of-range value snaps back to its default. Returns
+ * what was actually applied, which is what the panel renders.
+ */
+ipcMain.handle('cadence:settings:set', (_event, patch) => {
+  const next = normalizeSettings({ ...readState(), ...(patch && typeof patch === 'object' ? patch : {}) });
+  applySettings(next);
+  writeState(next);
+  return { ...next, version: app.getVersion() };
 });
 
-ipcMain.handle('cadence:state', () => {
-  const saved = readState();
-  return {
-    pinned: saved.pinned !== false,
-    provider: saved.provider || 'all',
-    metric: saved.metric === 'tokens' ? 'tokens' : 'signal',
-  };
-});
-
-ipcMain.handle('cadence:metric', (_event, metric) => {
-  const chosen = metric === 'tokens' ? 'tokens' : 'signal';
-  writeState({ metric: chosen });
-  return chosen;
-});
-
+// Provider is not in the settings sheet — it is the rail above the graph — so it
+// keeps its own handler. Everything the sheet owns goes through cadence:settings.
 ipcMain.handle('cadence:provider', (_event, provider) => {
   const chosen = PROVIDERS.includes(provider) ? provider : 'all';
   writeState({ provider: chosen });
@@ -224,13 +274,13 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     statePath = path.join(app.getPath('userData'), 'widget-state.json');
     Menu.setApplicationMenu(null);
+    // Theme has to land before the window exists, or a light-themed panel paints
+    // one frame of dark chrome on the way up.
+    const settings = normalizeSettings(readState());
+    nativeTheme.themeSource = settings.theme;
     createWidget();
+    applySettings(settings);
     refresh(true).catch(() => {});
-    setInterval(() => {
-      refresh(true)
-        .then(() => widget && !widget.isDestroyed() && widget.webContents.send('cadence:tick'))
-        .catch(() => {});
-    }, 60000);
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWidget(); });
   });
 

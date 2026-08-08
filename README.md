@@ -25,15 +25,15 @@ cannot be piped or redirected. See [one command, one graph](#one-command-one-gra
 
 ### Widget controls
 
-Window controls sit at the top-left; the live indicator and wordmark at the top-right.
+The wordmark and live indicator sit at the top-left; the window controls at the top-right.
 
 | Control | Where | What it does |
 | --- | --- | --- |
-| Close | top-left | Quit Cadence |
-| Minimize | top-left | Send to the taskbar (or `Esc`) |
-| Pin | top-left | Toggle always-on-top; the pin tilts and dims when off |
-| Settings | top-left | Open the settings sheet (or `Ctrl+,`) |
-| Timestamp | top-right | Force an immediate rescan (or `Ctrl+R`) |
+| Timestamp | top-left | Force an immediate rescan (or `Ctrl+R`) |
+| Pin | top-right | Toggle always-on-top; the pin tilts and dims when off |
+| Settings | top-right | Open the settings sheet (or `Ctrl+,`) |
+| Minimize | top-right | Send to the taskbar (or `Esc`) |
+| Close | top-right | Quit Cadence |
 | Provider row | below header | Switch between combined, Claude, Codex, and Cursor |
 | Bottom-left figure | readout | Switch between SIGNAL and TOTAL (see below) |
 | Reference line | bottom | Click for another comparison; it also rotates on its own |

@@ -1,6 +1,6 @@
 'use strict';
 
-const { PALETTES, level, owner } = require('./svg');
+const { PALETTES, level } = require('./svg');
 
 /**
  * The same graph the widget draws, in a terminal. The ramps and the log scale
@@ -24,7 +24,6 @@ const DIM = `${ESC}[2m`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
 
 const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
-const PROVIDER_ORDER = ['claude', 'codex', 'cursor'];
 const GUTTER = 4; // "Mon " — the widest row label plus its separating space
 const CELL = 2; // one glyph and one space, so columns read as a grid, not a bar
 
@@ -85,10 +84,7 @@ function renderTerminal(report, options = {}) {
 
   function cell(day) {
     if (!day) return ' '.repeat(CELL);
-    // The combined view paints each day in the colours of whichever provider
-    // did more of it, exactly as the panel and the SVG do.
-    const scale = report.provider === 'all' ? PALETTES[owner(day, metric)] : palette;
-    return swatch(level(day[metric], max), scale);
+    return swatch(level(day[metric], max), palette);
   }
 
   const rows = DAY_LABELS.map((label, weekday) => {
@@ -132,16 +128,8 @@ function renderTerminal(report, options = {}) {
     `${report.longestStreak} day streak`,
   ].join(gap);
 
-  // One ramp for a single provider; all three when they are combined, because a
-  // cell's colour then tells you which provider owns the day. Faint only wraps
-  // the words — a dim around the swatches would be cancelled by the first reset
-  // inside them anyway.
-  // Without colour the three ramps would be the same five glyphs three times
-  // over, so a plain-text graph keeps the single Less…More scale.
-  const ramp = (name) => [1, 2, 3, 4].map((step) => swatch(step, PALETTES[name])).join('');
-  const legend = colour && report.provider === 'all'
-    ? PROVIDER_ORDER.map(ramp).join(' ').trimEnd()
-    : `${faint('Less ')}${[0, 1, 2, 3, 4].map((step) => swatch(step, palette)).join('')}${faint('More')}`;
+  // Every view has one Less…More scale; `all` uses GitHub's green ramp.
+  const legend = `${faint('Less ')}${[0, 1, 2, 3, 4].map((step) => swatch(step, palette)).join('')}${faint('More')}`;
   const range = `${report.range.from} ${glyphs.dash} ${report.range.to}`;
   // Right-align the range under the graph when the window is wide enough for it
   // to clear the legend; on a narrow terminal it drops to its own line.

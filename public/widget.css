@@ -29,6 +29,10 @@
      the steps are spaced on lightness alone and end brighter than the others. */
   --cursor-1: #3f434a; --cursor-2: #6a707a; --cursor-3: #9aa1ac; --cursor-4: #d8dee6;
   --cursor-glow: rgba(216, 222, 230, .5);
+  /* GitHub's dark contribution graph, used verbatim by the combined view. */
+  --github-0: #161b22; --github-1: #0e4429; --github-2: #006d32;
+  --github-3: #26a641; --github-4: #39d353;
+  --github-glow: transparent;
 
   --ink: #f0eee9;
   --ink-soft: #b9bfc9;
@@ -69,8 +73,7 @@
   --wash-codex: rgba(2, 133, 255, .12);
   --wash-cursor: rgba(182, 188, 197, .07);
 
-  /* Default ramp is Claude's; the combined view overrides it per cell to
-     whichever provider actually did the work that day. */
+  /* Default ramp is Claude's; provider selectors below swap it as needed. */
   --cell-1: var(--claude-1);
   --cell-2: var(--claude-2);
   --cell-3: var(--claude-3);
@@ -94,6 +97,10 @@
      so a busy day is the heaviest mark rather than the lightest. */
   --cursor-1: #dcdfe4; --cursor-2: #aab1bb; --cursor-3: #6f7783; --cursor-4: #333a45;
   --cursor-glow: rgba(51, 58, 69, .26);
+  /* GitHub's light contribution graph, including its empty-day grey. */
+  --github-0: #ebedf0; --github-1: #9be9a8; --github-2: #40c463;
+  --github-3: #30a14e; --github-4: #216e39;
+  --github-glow: transparent;
 
   --ink: #16191e;
   --ink-soft: #3f4650;
@@ -135,30 +142,26 @@
   --wash-cursor: rgba(51, 58, 69, .06);
 }
 
-.ramp-claude,
-body[data-provider="claude"],
-body[data-provider="all"] .cell[data-owner="claude"] {
+body[data-provider="claude"] {
   --cell-1: var(--claude-1); --cell-2: var(--claude-2);
   --cell-3: var(--claude-3); --cell-4: var(--claude-4);
   --glow: var(--claude-glow);
 }
-/* In the combined view a day is painted in the colours of whichever provider
-   did more of that day's work, so the graph shows *who* as well as *how much*.
-   Custom properties resolve per element, so re-declaring the ramp on the cell
-   is all it takes. */
-.ramp-codex,
-body[data-provider="codex"],
-body[data-provider="all"] .cell[data-owner="codex"] {
+/* Individual-agent views keep the established product-specific ramps. */
+body[data-provider="codex"] {
   --cell-1: var(--codex-1); --cell-2: var(--codex-2);
   --cell-3: var(--codex-3); --cell-4: var(--codex-4);
   --glow: var(--codex-glow);
 }
-.ramp-cursor,
-body[data-provider="cursor"],
-body[data-provider="all"] .cell[data-owner="cursor"] {
+body[data-provider="cursor"] {
   --cell-1: var(--cursor-1); --cell-2: var(--cursor-2);
   --cell-3: var(--cursor-3); --cell-4: var(--cursor-4);
   --glow: var(--cursor-glow);
+}
+body[data-provider="all"] {
+  --cell-0: var(--github-0); --cell-1: var(--github-1); --cell-2: var(--github-2);
+  --cell-3: var(--github-3); --cell-4: var(--github-4);
+  --glow: var(--github-glow);
 }
 
 * { box-sizing: border-box; }
@@ -370,14 +373,6 @@ body.stale .pulse { background: var(--stale); box-shadow: 0 0 9px var(--stale); 
 .legend i[data-level="4"] { background: var(--cell-4); }
 .ramp-single i:first-of-type { margin-left: 4px; }
 .ramp-single i:last-of-type { margin-right: 4px; }
-/* One ramp when a single provider is selected; all three when they are
-   combined, because a cell's colour then tells you which provider owns it. */
-.ramp-claude, .ramp-codex, .ramp-cursor { display: none; }
-body[data-provider="all"] .ramp-single { display: none; }
-body[data-provider="all"] .ramp-claude,
-body[data-provider="all"] .ramp-codex,
-body[data-provider="all"] .ramp-cursor { display: flex; }
-
 /* ---- usage bars ---- */
 /* How hard each agent has been worked in the last five hours and the last seven
    days. Codex publishes a real percentage of its own limit; the other two are

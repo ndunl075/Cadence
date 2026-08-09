@@ -191,8 +191,9 @@ test('a store it cannot read costs Cursor only', async () => {
   assert.equal(result.days['2026-01-05'].claude.signal, 10, 'the other providers still report');
 });
 
-test('the combined view hands each day to whichever provider ran the most', () => {
-  const { owner } = require('../src/svg');
+test('identifies the leading provider for combined-view tooltip emphasis', () => {
+  const { owner, PALETTES } = require('../src/svg');
+  assert.deepEqual(PALETTES.all, ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353']);
   const day = (claude, codex, cursor) => ({ providers: { claude: { signal: claude }, codex: { signal: codex }, cursor: { signal: cursor } } });
   assert.equal(owner(day(10, 5, 3), 'signal'), 'claude');
   assert.equal(owner(day(1, 50, 3), 'signal'), 'codex');

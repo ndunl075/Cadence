@@ -96,7 +96,7 @@ test('colour is off for a pipe, on for a terminal, and always off with --no-colo
   const terminal = sink({ isTTY: true });
   await run(['--weeks', '4'], { ...io, stdout: terminal });
   assert.match(terminal.text, ESCAPE);
-  assert.ok(terminal.text.includes('\u001b[38;2;235;104;52m'), 'busiest day uses the Anthropic orange ramp');
+  assert.ok(terminal.text.includes('\u001b[38;2;57;211;83m'), 'busiest combined day uses GitHub green');
 
   const forced = sink();
   await run(['--weeks', '4', '--color'], { ...io, stdout: forced });
@@ -111,7 +111,7 @@ test('colour is off for a pipe, on for a terminal, and always off with --no-colo
   assert.doesNotMatch(respectful.text, ESCAPE, 'NO_COLOR is honoured without a flag');
 });
 
-test('paints a Codex-heavy day in the Codex ramp in the combined view', async () => {
+test('paints a Codex-heavy day in GitHub green in the combined view', async () => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cadence-cli-'));
   const claude = path.join(root, 'claude');
   const codex = path.join(root, 'codex');
@@ -122,15 +122,11 @@ test('paints a Codex-heavy day in the Codex ramp in the combined view', async ()
 
   const stdout = sink({ isTTY: true });
   await run(['--weeks', '4'], { stdout, today: TODAY, env: {}, collect: { claudeRoots: [claude], codexRoots: [codex], statsCaches: [], cursorStores: [] } });
-  assert.ok(stdout.text.includes('\u001b[38;2;112;186;255m'), 'the day the Codex side led is blue');
-  // The combined legend carries one ramp per provider, so a colour names its
-  // owner: Anthropic orange, Codex blue, and Cursor's grey.
-  for (const ink of ['\u001b[38;2;235;104;52m', '\u001b[38;2;112;186;255m', '\u001b[38;2;216;222;230m']) {
-    assert.ok(stdout.text.includes(ink), `expected ${JSON.stringify(ink)} in the legend`);
-  }
+  assert.ok(stdout.text.includes('\u001b[38;2;57;211;83m'), 'the busiest combined day is GitHub green');
+  assert.ok(stdout.text.includes('\u001b[38;2;14;68;41m'), 'the legend includes GitHub green level one');
 });
 
-test('paints a Cursor-heavy day in the grey ramp', async () => {
+test('paints a Cursor-heavy day in GitHub green in the combined view', async () => {
   const { DatabaseSync } = require('node:sqlite');
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cadence-cli-'));
   const claude = path.join(root, 'claude');
@@ -150,7 +146,7 @@ test('paints a Cursor-heavy day in the grey ramp', async () => {
     stdout, today: TODAY, env: {},
     collect: { claudeRoots: [claude], codexRoots: [], statsCaches: [], cursorStores: [store] },
   });
-  assert.ok(stdout.text.includes('\u001b[38;2;216;222;230m'), 'the day Cursor led is grey');
+  assert.ok(stdout.text.includes('\u001b[38;2;57;211;83m'), 'the busiest combined day is GitHub green');
 });
 
 test('falls back to the history that fits the terminal, and says so', async () => {

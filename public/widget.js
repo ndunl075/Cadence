@@ -198,8 +198,8 @@ function render(report) {
     cell.dataset.claude = claude;
     cell.dataset.codex = codex;
     cell.dataset.cursor = cursor;
-    // In the combined view, paint the day in whichever provider did more of it.
-    // Claude takes ties, which also covers Claude-only days.
+    // Keep the leading provider for tooltip emphasis. Combined-view colour is
+    // intentionally a single GitHub-green volume scale.
     if (day[metric] > 0) cell.dataset.owner = owner(claude, codex, cursor);
     if (day.backfilled && day.signal > 0) cell.dataset.backfilled = '1';
     if (day.date === todayKey) cell.dataset.today = '1';
@@ -377,7 +377,7 @@ $('#grid').addEventListener('pointerover', (event) => {
   const cell = event.target.closest('.cell');
   if (!cell) return;
   const value = Number(cell.dataset.value);
-  // Emphasise the provider that owns the day, matching the cell's colour.
+  // Emphasise the provider that contributed the most tokens that day.
   const ownedBy = cell.dataset.owner;
   const side = ([key, cls, label]) => {
     const text = `<span class="${cls}">${label} ${compact.format(cell.dataset[key])}</span>`;

@@ -3,14 +3,14 @@
 // Matches the widget, using each product's own design tokens: Anthropic's
 // --orange-750/-550/-450/-350 for Claude, and OpenAI's --blue-900/-400 for
 // Codex. Cursor publishes no colour scale — its mark is monochrome — so it gets
-// a neutral grey ramp cut to the same four steps. The `all` entry only supplies
-// the empty-day colour: combined days are painted from whichever provider's
-// scale owns them.
+// a neutral grey ramp cut to the same four steps. The `all` entry is GitHub's
+// exact dark-theme profile contribution ramp.
 const PALETTES = {
   claude: ['#1d1712', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
   codex: ['#141a24', '#00284d', '#0257a7', '#0285ff', '#70baff'],
   cursor: ['#17181a', '#3f434a', '#6a707a', '#9aa1ac', '#d8dee6'],
-  all: ['#171a21', '#4b1b08', '#993d19', '#c25124', '#eb6834'],
+  // GitHub's exact dark-theme profile contribution ramp.
+  all: ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353'],
 };
 
 /**
@@ -52,12 +52,9 @@ function renderSvg(report, options = {}) {
     const position = index + firstOffset;
     const x = left + Math.floor(position / 7) * (cell + gap);
     const y = top + (position % 7) * (cell + gap);
-    // Combined view paints each day in the colours of whichever provider did
-    // more of it, so the graph shows who as well as how much.
     const step = level(day[metric], max);
-    const scale = report.provider === 'all' && step > 0 ? PALETTES[owner(day, metric)] : palette;
     const note = day.backfilled && day.signal ? ' (from stats cache)' : '';
-    return `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${scale[step]}"><title>${escape(day.date)} · ${day[metric].toLocaleString()} tokens${note}</title></rect>`;
+    return `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${palette[step]}"><title>${escape(day.date)} · ${day[metric].toLocaleString()} tokens${note}</title></rect>`;
   }).join('');
   const legend = palette.map((color, index) => `<rect x="${width - 126 + index * 17}" y="${height - 28}" width="11" height="11" rx="2" fill="${color}"/>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escape(title)}">

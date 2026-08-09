@@ -69,9 +69,9 @@ Less · ░ ▒ ▓ █ More                                              2025-1
 ```
 
 That is the plain-text form, as it comes out of a pipe. On a terminal the cells
-carry the same colours as the panel — so a day is orange, blue or grey depending
-on which agent did the most of it — and the legend becomes one ramp per
-provider. With no window flag the graph fits your terminal, showing as much
+carry the same colours as the panel: the combined view uses GitHub's green
+contribution ramp, while individual-agent views keep their own palettes. With
+no window flag the graph fits your terminal, showing as much
 recent history as there is room for and saying so when it had to trim.
 
 | | |
@@ -181,20 +181,18 @@ lightness alone and it ends brighter than the other two. On the light theme it
 runs the other way, pale slate down to near-black, so a busy day is still the
 heaviest mark on the page rather than the lightest.
 
-**The combined view colours each day by who did the work.** A day where Codex
-ran more tokens than the others is painted in Codex blue, a Cursor-heavy day in
-grey, a Claude-heavy day in Anthropic orange. Intensity still encodes volume, so
-the graph tells you *how much* and *which agent* at the same time, and a stretch
-where you switched tools is visible at a glance. Ties go to Claude, which also
-covers Claude-only days. The legend shows all three ramps in this view, one per
-provider, and the tooltip bolds whichever side led that day.
+**The combined view uses GitHub's contribution colours exactly.** Its dark ramp
+is `#161b22` → `#0e4429` → `#006d32` → `#26a641` → `#39d353`; its light ramp
+is `#ebedf0` → `#9be9a8` → `#40c463` → `#30a14e` → `#216e39`. Intensity
+encodes total volume across all agents, and the tooltip still breaks the day
+down by provider and bolds whichever side contributed the most.
 
 Lightness increases strictly across every ramp, so a busier day is never darker
 than a quieter one. Peak days carry a soft glow in their own hue. Every cell is
 a single flat colour — days backfilled from the stats cache used to carry a
 hairline border, but a long backfilled stretch ringed every square and broke the
 flat colour the graph is read by, so that distinction lives in the tooltip
-instead. The SVG endpoint applies the same per-day ownership rule.
+instead. The SVG endpoint and terminal graph apply the same GitHub ramp.
 
 ## Two ways to count
 

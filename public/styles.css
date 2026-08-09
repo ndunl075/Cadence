@@ -6,11 +6,12 @@
   --line: #2b2f37;
   --claude: #e88d55;
   --codex: #45b9e8;
-  --cell-0: #22262e;
-  --cell-1: #39475c;
-  --cell-2: #5c7390;
-  --cell-3: #a57969;
-  --cell-4: #ed965f;
+  /* Exact dark-theme shades from GitHub's profile contribution graph. */
+  --cell-0: #161b22;
+  --cell-1: #0e4429;
+  --cell-2: #006d32;
+  --cell-3: #26a641;
+  --cell-4: #39d353;
 }
 
 * { box-sizing: border-box; }

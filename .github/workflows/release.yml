@@ -22,6 +22,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # build:exe passes --publish never so electron-builder does not try to
+      # create the GitHub release itself when a tag is present (that path needs
+      # GH_TOKEN and aborted v0.5.0 after the setup exe was already built).
+      # softprops/action-gh-release below owns publishing the artifacts.
       - run: npm run build:exe
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:

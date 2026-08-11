@@ -29,9 +29,9 @@ jobs:
       - run: npm run build:exe
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          # cadence-setup.exe is the installer (upgrades an existing install in
-          # place). The zip is the same app as a plain folder for CLI use.
+          # Cadence-Installer.exe upgrades an existing install in place.
+          # The zip is the same app as a plain folder for CLI use.
           files: |
-            dist/cadence-setup.exe
+            dist/Cadence-Installer.exe
             dist/cadence-win-x64.zip
           generate_release_notes: true

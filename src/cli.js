@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { collect, summarize, PROVIDERS } = require('./usage');
+const { syncDevices } = require('./sync');
 const { comparisons } = require('./comparisons');
 const { renderSvg } = require('./svg');
 const { columnsFor, renderTerminal, weeksThatFit } = require('./terminal');
@@ -206,7 +207,8 @@ async function run(argv, io = {}) {
   }
 
   const today = io.today || new Date();
-  const data = await collect(io.collect || {});
+  const collected = await collect(io.collect || {});
+  const data = syncDevices(collected, io.sync || {});
   const fitted = options.window.kind === 'auto'
     ? fitToTerminal(data.days, options.provider, io.width ?? (out.columns || Infinity), today)
     : { report: summarizeFor(data.days, options.provider, options.window, today) };

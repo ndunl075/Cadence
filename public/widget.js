@@ -17,9 +17,14 @@ const settings = {
   barClaude: false,
   barCodex: false,
   barCursor: false,
+  compactView: false,
   pinned: true,
   metric: 'signal',
   provider: 'all',
+  syncEnabled: false,
+  syncDir: '',
+  deviceId: '',
+  deviceName: '',
 };
 
 // `signal` is fresh input + output. `tokens` adds cache reads and writes, which
@@ -235,6 +240,7 @@ function render(report) {
   $('#status-text').textContent = stamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toUpperCase();
   document.body.classList.toggle('stale', !bridge);
   if (!bridge) $('#status-text').textContent = 'DEMO';
+  paintSync();
 }
 
 async function load(provider = state.provider, force = false) {
@@ -274,6 +280,28 @@ systemDark.addEventListener('change', () => {
   if (settings.theme === 'system') applyTheme('system');
 });
 
+function paintSync() {
+  const pathRow = $('#sync-path');
+  const meta = $('#sync-meta');
+  const locus = $('#settings-locus');
+  const enabled = settings.syncEnabled === true;
+  pathRow.hidden = !enabled;
+  $('#sync-dir').textContent = settings.syncDir || 'No folder chosen';
+  if (!enabled) {
+    meta.hidden = true;
+    locus.textContent = 'SAVED ON THIS MACHINE';
+    return;
+  }
+  const peers = state.report?.sync?.peers || [];
+  const err = state.report?.sync?.error;
+  meta.hidden = false;
+  if (err) meta.textContent = `Sync error: ${err}`;
+  else if (!settings.syncDir) meta.textContent = 'Choose a folder shared with your other machines.';
+  else if (!peers.length) meta.textContent = `Publishing as ${settings.deviceName || 'this device'}. Waiting for peers.`;
+  else meta.textContent = `${peers.length} other device${peers.length === 1 ? '' : 's'}: ${peers.map((p) => p.deviceName).join(', ')}`;
+  locus.textContent = settings.syncDir ? 'SYNC FOLDER ON' : 'SAVED ON THIS MACHINE';
+}
+
 function paintControls() {
   document.querySelectorAll('.choice').forEach((group) => {
     const chosen = String(settings[group.dataset.setting]);
@@ -284,6 +312,7 @@ function paintControls() {
   document.querySelectorAll('.switch').forEach((toggle) => {
     toggle.setAttribute('aria-checked', String(settings[toggle.dataset.setting] === true));
   });
+  paintSync();
 }
 
 /** Adopt whatever the main process says is now in effect — never the optimistic
@@ -294,6 +323,7 @@ function adopt(next) {
   const barsChanged = BAR_PROVIDERS.some(([, , key]) => key in next && next[key] !== settings[key]);
   Object.assign(settings, next);
   applyTheme(settings.theme);
+  document.body.classList.toggle('compact-view', settings.compactView === true);
   paintControls();
   pin.setAttribute('aria-pressed', String(settings.pinned));
   pin.title = settings.pinned ? 'Keep on top' : 'Not on top';
@@ -332,9 +362,27 @@ document.querySelectorAll('.choice').forEach((group) => {
 });
 
 document.querySelectorAll('.switch').forEach((toggle) => {
-  toggle.addEventListener('click', () => {
-    save({ [toggle.dataset.setting]: toggle.getAttribute('aria-checked') !== 'true' });
+  toggle.addEventListener('click', async () => {
+    const next = toggle.getAttribute('aria-checked') !== 'true';
+    if (toggle.dataset.setting === 'syncEnabled' && next && !settings.syncDir) {
+      const chosen = bridge ? await bridge.pickSyncFolder() : null;
+      if (chosen) {
+        adopt(chosen);
+        load(state.provider, true);
+      }
+      return;
+    }
+    await save({ [toggle.dataset.setting]: next });
+    if (toggle.dataset.setting === 'syncEnabled') load(state.provider, true);
   });
+});
+
+$('#sync-pick').addEventListener('click', async () => {
+  if (!bridge) return;
+  const chosen = await bridge.pickSyncFolder();
+  if (!chosen) return;
+  adopt(chosen);
+  load(state.provider, true);
 });
 
 /* ---- interactions ---- */

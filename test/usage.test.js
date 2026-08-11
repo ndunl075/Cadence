@@ -144,8 +144,8 @@ async function cursorStore(rows) {
   return file;
 }
 
-const bubble = (createdAt, inputTokens, outputTokens, usageUuid) => ({
-  type: 2, createdAt, usageUuid, tokenCount: { inputTokens, outputTokens }, text: 'never read',
+const bubble = (createdAt, inputTokens, outputTokens, usageUuid, extra = {}) => ({
+  type: 2, createdAt, usageUuid, tokenCount: { inputTokens, outputTokens }, text: 'never read', ...extra,
 });
 
 test('reads Cursor turns out of its composer store', async () => {
@@ -154,7 +154,7 @@ test('reads Cursor turns out of its composer store', async () => {
     ['bubbleId:chat-a:turn-2', bubble('2026-01-05T11:00:00Z', 500, 50, 'u2')],
     ['bubbleId:chat-b:turn-1', bubble('2026-01-06T09:00:00Z', 300, 30, 'u3')],
     // A user turn: no tokens of its own, and must not count as activity.
-    ['bubbleId:chat-b:turn-0', bubble('2026-01-06T08:59:00Z', 0, 0, 'u4')],
+    ['bubbleId:chat-b:turn-0', bubble('2026-01-06T08:59:00Z', 0, 0, 'u4', { type: 1 })],
     // Not a chat turn at all.
     ['composerData:chat-b', { tokenCount: { inputTokens: 99999, outputTokens: 1 } }],
   ]);
@@ -167,6 +167,54 @@ test('reads Cursor turns out of its composer store', async () => {
   assert.equal(first.messages, 2);
   assert.equal(first.sessions, 1);
   assert.equal(result.days[dateKey('2026-01-06T09:00:00Z')].cursor.signal, 330);
+});
+
+test('estimates modern Cursor chats when bubble tokenCount is zeroed', async () => {
+  const store = await cursorStore([
+    ['composerData:chat-z', {
+      composerId: 'chat-z',
+      createdAt: Date.parse('2026-01-07T12:00:00Z'),
+      lastUpdatedAt: Date.parse('2026-01-07T15:00:00Z'),
+      promptTokenBreakdown: { totalUsedTokens: 4000 },
+      contextTokensUsed: 1111,
+    }],
+    ['bubbleId:chat-z:user-1', {
+      type: 1, createdAt: '2026-01-07T12:01:00Z', usageUuid: 'zu',
+      tokenCount: { inputTokens: 0, outputTokens: 0 }, text: 'hello there friend!!',
+    }],
+    ['bubbleId:chat-z:asst-1', {
+      type: 2, createdAt: '2026-01-07T12:02:00Z', usageUuid: 'za',
+      tokenCount: { inputTokens: 0, outputTokens: 0 },
+      // 40 chars → 10 estimated output tokens
+      text: 'abcdefghijabcdefghijabcdefghijabcdefghij',
+    }],
+  ]);
+
+  const result = await collect({ claudeRoots: [], codexRoots: [], statsCaches: [], cursorStores: [store] });
+  const day = result.days[dateKey('2026-01-07T15:00:00Z')].cursor;
+  assert.equal(day.input, 4000, 'context meter credited once, preferring promptTokenBreakdown');
+  assert.equal(day.output, 10, 'assistant text estimated at chars/4');
+  assert.equal(day.signal, 4010);
+  assert.equal(result.files.cursor, 1);
+});
+
+test('exact Cursor bubble tokens disable context-meter estimates for that chat', async () => {
+  const store = await cursorStore([
+    ['composerData:chat-x', {
+      composerId: 'chat-x',
+      createdAt: Date.parse('2026-01-08T12:00:00Z'),
+      promptTokenBreakdown: { totalUsedTokens: 9000 },
+    }],
+    ['bubbleId:chat-x:asst-1', bubble('2026-01-08T12:05:00Z', 100, 20, 'exact-1', {
+      text: 'abcdefghijabcdefghijabcdefghijabcdefghij',
+    })],
+  ]);
+
+  const result = await collect({ claudeRoots: [], codexRoots: [], statsCaches: [], cursorStores: [store] });
+  const day = result.days[dateKey('2026-01-08T12:05:00Z')].cursor;
+  assert.equal(day.signal, 120, 'legacy exact counts win; meter and text estimates stay off');
+  assert.equal(day.input, 100);
+  assert.equal(day.output, 20);
 });
 
 test('counts a Cursor turn once even when two stores hold it', async () => {

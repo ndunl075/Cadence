@@ -35,5 +35,5 @@ jobs:
         with:
           name: cadence-windows-x64
           path: |
-            dist/cadence.exe
+            dist/cadence-setup.exe
             dist/cadence-win-x64.zip

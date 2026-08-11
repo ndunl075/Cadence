@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('cadence', {
   setProvider: (provider) => ipcRenderer.invoke('cadence:provider', provider),
   settings: () => ipcRenderer.invoke('cadence:settings'),
   saveSettings: (patch) => ipcRenderer.invoke('cadence:settings:set', patch),
+  pickSyncFolder: () => ipcRenderer.invoke('cadence:sync:pickFolder'),
   close: () => ipcRenderer.send('cadence:close'),
   minimize: () => ipcRenderer.send('cadence:minimize'),
   onTick: (handler) => {

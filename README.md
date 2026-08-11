@@ -4,12 +4,21 @@ Your AI coding rhythm, on your desktop. Cadence is a small always-on-top widget 
 
 ## Download for Windows
 
-[**Download Cadence for Windows (x64)**](https://github.com/ndunl075/Cadence/releases/latest/download/cadence.exe)
+[**Download Cadence Setup for Windows (x64)**](https://github.com/ndunl075/Cadence/releases/latest/download/cadence-setup.exe)
 
-Download `cadence.exe` and open it. The widget tucks into the top-left corner of your primary display and floats above your other windows. Windows SmartScreen may show a warning because this early open-source build is not code-signed yet.
+Download `cadence-setup.exe` and run it. The installer puts Cadence in your
+user programs folder, adds Start Menu / desktop shortcuts, and **updates an
+existing install in place** if Cadence is already on the machine — you do not
+end up with multiple copies. The widget tucks into the top-left corner of your
+primary display and floats above your other windows. Windows SmartScreen may
+show a warning because this early open-source build is not code-signed yet.
+
+Releases also carry `cadence-win-x64.zip`, the same app as a plain folder.
+Prefer it if you mainly want the command line without running the installer.
 
 - Frameless panel that stays on top, drag it anywhere by its header
 - Remembers its position, size, pinned state, metric, and provider between launches
+- Optional compact view: graph, agents, and comparisons only
 - One agent on its own, or all three combined with each day coloured by whichever did more of it
 - Optional per-agent 5-hour and 7-day usage bars, each independently enabled
 - Month labels and a full date range, with per-day figures on hover
@@ -18,11 +27,6 @@ Download `cadence.exe` and open it. The widget tucks into the top-left corner of
 - The same graph in your terminal, plus an optional local JSON API and README-ready SVG
 
 Cadence never reads prompt text or source code into its reports. It only aggregates timestamps and token-count fields. No Anthropic, OpenAI or Cursor API key is required.
-
-Releases also carry `cadence-win-x64.zip`, the same app as a plain folder. Prefer
-it if you mainly want the command line: the portable `.exe` is a self-extracting
-wrapper that does not hand the app your shell's pipe, so `cadence.exe graph`
-cannot be piped or redirected. See [one command, one graph](#one-command-one-graph).
 
 ### Widget controls
 
@@ -102,20 +106,22 @@ npm link                         # then `cadence` anywhere
 
 ### From the Windows download
 
-The executable answers the same commands — `cadence.exe graph`, `cadence.exe
---help` — and opens the widget when given no arguments, so one file does both.
-Two Windows details are worth knowing:
+After setup, Cadence is on your PATH from the install folder's `Cadence.exe`
+(or open it from the Start Menu). The same binary answers CLI commands —
 
-- **The portable `cadence.exe` cannot be piped or redirected.** It is a
-  self-extracting wrapper that launches the real app without passing on your
-  shell's stdout, so `cadence.exe graph > out.txt` writes an empty file. Use
-  `cadence.exe graph --out out.txt`, or take `cadence-win-x64.zip` from the same
-  release and run `Cadence.exe graph`, which pipes normally.
-- **Your shell will not wait for it.** Windows does not block on a windowed
-  program, so the prompt returns before the graph prints. `Start-Process -Wait
-  -NoNewWindow .\cadence.exe -ArgumentList graph` waits; so does piping.
+```sh
+Cadence.exe graph
+Cadence.exe json
+Cadence.exe --help
+```
 
-If the graph comes out grey when you expected colour, pass `--color`: a
+— and opens the widget when given no arguments. Prefer the zip release if you
+want a folder you can drop anywhere without running the installer; pipes and
+redirects work normally from that `Cadence.exe`.
+
+Windows does not block on a windowed program, so the prompt may return before
+the graph prints. `Start-Process -Wait -NoNewWindow .\Cadence.exe -ArgumentList graph`
+waits. If the graph comes out grey when you expected colour, pass `--color`: a
 GUI-subsystem binary cannot always tell that it is attached to a terminal.
 
 ### Settings
@@ -129,16 +135,31 @@ sheet before it minimizes the window.
 | **Appearance** | Dark *(default)*, Light, System | Repaints the panel. System follows Windows and switches live when you do. |
 | **Rescan logs** | 30s, 1m *(default)*, 5m, 15m | How often transcripts are re-read. Longer intervals touch the disk less. |
 | **Headline metric** | Signal *(default)*, Total | Same switch as clicking the bottom-left figure. |
+| **Compact view** | off *(default)* | Graph, provider rail, and comparison line only — hides the stats strip, date caption, and usage bars, and shortens the panel. |
 | **Usage bars** | Claude, Codex, Cursor; all off by default | Independently show each agent's rolling 5-hour and 7-day usage below the graph. |
 | **Keep on top** | on *(default)* | Same as the pin button; the two stay in sync. |
 | **Start with Windows** | off *(default)* | Registers Cadence as a login item. |
 | **Cycle comparisons** | on *(default)* | Turn off to stop the reference line rotating by itself. |
+| **Sync across devices** | off *(default)* | Publish daily totals into a folder you share (OneDrive, Dropbox, iCloud, or git) and merge peers on every scan. Aggregates only — no prompts or source. |
 
 Settings are stored in `widget-state.json` in Electron's per-user data directory
-and never leave the machine. The main process is what actually holds them: the
+and never leave the machine unless you turn sync on. The main process is what actually holds them: the
 panel sends a patch, the main process clamps every value to a known option,
 applies it, and sends back what really took effect — so the sheet shows the true
 state even when the OS refuses something, such as a login item blocked by policy.
+
+### Sync across devices
+
+Cadence still has no account. Sync is a folder you already share between machines:
+
+1. Create a folder in OneDrive, Dropbox, iCloud Drive, Syncthing, or a small git repo.
+2. On each machine: Settings → **Sync across devices** → choose that same folder.
+3. Each device writes `device-<id>.json` with daily Claude / Codex / Cursor totals only.
+4. Every rescan republishes this machine and adds every other device's days into the graph.
+
+A day you worked on two machines counts both. The live 5-hour / 7-day usage bars stay local — they need hour-level data that is not synced. CLI and the local server honour the same layout when `CADENCE_SYNC_DIR` is set (optional `CADENCE_DEVICE_ID` / `CADENCE_DEVICE_NAME`).
+
+If the widget sometimes seems not to open, click the exe again: Cadence is single-instance, and a second launch now forces the existing panel to the front. Startup also shows the window within half a second even when Electron skips `ready-to-show` on the transparent panel.
 
 ### Usage bars and limits
 
@@ -210,20 +231,23 @@ Cache reads dominate — around 97% of raw volume — because every turn re-read
 
 The API exposes both: every daily row carries `signal` and `tokens`, and the SVG accepts `?metric=tokens`.
 
-### Cursor reads high, and is not corrected
+### Cursor reads from a context meter now
 
-Cursor records only `inputTokens` and `outputTokens` per turn, with no cached
-figure to subtract, and its input is the whole prompt for that turn — the
-context re-sent every time. It is therefore the same gross number Codex reports,
-except that here there is nothing to correct it with.
+Current Cursor builds write `{ inputTokens: 0, outputTokens: 0 }` on every chat
+bubble. The real figure that still lands on disk is the conversation context
+meter on `composerData` — `promptTokenBreakdown.totalUsedTokens`, falling back
+to `contextTokensUsed`. Cadence credits that meter **once per chat** (dated at
+the composer's last update) and estimates assistant output from visible text at
+roughly four characters per token. Older installs that still carry non-zero
+per-bubble `tokenCount` values keep using those exact numbers, and any chat with
+exact counts skips the meter/text estimates so the same work is never counted
+twice.
 
-So a Cursor day sits high against a Claude day of comparable work, and on a
-machine that has used both heavily Cursor can be most of the combined total.
-That is a real count of real tokens, not a bug, but it is not directly
-comparable to the other two. Cadence counts it as reported rather than scaling
-it by a guess. Its `TOTAL` equals its `SIGNAL` for the same reason: no cache
-figures exist to add. Click **CURSOR** in the rail, or pass
-`--provider cursor`, to read it on its own scale.
+That meter is a snapshot of the context window, not a sum of every request, so
+Cursor undercounts versus the Cursor dashboard. It is still the best local
+signal available without a Cursor account API. Cursor also has no cache
+breakdown, so its `TOTAL` equals its `SIGNAL`. Click **CURSOR** in the rail, or
+pass `--provider cursor`, to read it on its own.
 
 ## The reference line
 
@@ -298,7 +322,7 @@ While Cadence is reachable at a public URL, embed it with:
 
 For a no-server option, run `npm run export` and publish the generated SVG/JSON through GitHub Pages, a gist, or any static host. The public API deliberately contains aggregate counts only.
 
-## Build the Windows executable
+## Build the Windows installer
 
 ```sh
 npm run build:exe
@@ -309,14 +333,15 @@ both automatically:
 
 | Artifact | What it is |
 | --- | --- |
-| `dist/cadence.exe` | One portable file. The widget download; its CLI mode needs `--out` (see [above](#from-the-windows-download)) |
+| `dist/cadence-setup.exe` | NSIS installer. Detects an existing Cadence install and upgrades it in place |
 | `dist/cadence-win-x64.zip` | The same app as a plain folder. `Cadence.exe graph` behaves like any other console program |
 
 ## How it works
 
-Cadence has no account, no server, and no API key. All three agents already
+Cadence has no account and no API key. All three agents already
 record every turn on your own disk; Cadence reads what they wrote, adds up the
-token-count fields, and draws the result. Nothing is sent anywhere.
+token-count fields, and draws the result. Nothing is sent anywhere unless you
+opt into a sync folder, and even then only daily aggregates leave the machine.
 
 ### 1. Finding your logs
 
@@ -369,17 +394,16 @@ published primary and secondary rate-limit percentages; Cadence retains the
 newest live reading for each window for the optional usage bars.
 
 **Cursor** stores each chat turn as a row in the `cursorDiskKV` table, keyed
-`bubbleId:<chat>:<turn>`, holding a JSON blob. Two fields out of that blob are
-read — `tokenCount` and `createdAt` — and the store is opened read-only. Turns
-whose count is zero are the user's own and the bookkeeping rows around them, so
-the query discards them in SQLite rather than parsing tens of thousands of blobs
-to find the ones that matter; the same turn seen in two profiles is counted once
-by its `usageUuid`. That store runs to a gigabyte or more on a well-used
-machine, so the extracted rows are cached and only re-read when the file or its
-write-ahead log actually changes. A store locked by a running Cursor, or written
-by a schema Cadence does not recognise, costs you the Cursor ramp and nothing
-else. Reading it needs `node:sqlite`, which means Node 22.5 or newer; the
-Windows build ships its own.
+`bubbleId:<chat>:<turn>`, holding a JSON blob. Older builds put real
+`tokenCount` values there; current builds leave them at zero. Cadence still
+reads exact non-zero counts when present. Otherwise it falls back to the
+composer context meter (`promptTokenBreakdown.totalUsedTokens` /
+`contextTokensUsed`, once per chat) plus an assistant-text estimate
+(`ceil(chars / 4)`). The store is opened read-only. Turns are deduplicated by
+`usageUuid` when Cursor provides one. A store locked by a running Cursor, or
+written by a schema Cadence does not recognise, costs you the Cursor ramp and
+nothing else. Reading it needs `node:sqlite`, which means Node 22.5 or newer;
+the Windows build ships its own.
 
 ### 3. Filling the gaps
 

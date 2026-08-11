@@ -6,6 +6,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { collect, summarize, PROVIDERS } = require('./usage');
+const { syncDevices } = require('./sync');
 const { renderSvg } = require('./svg');
 const { comparisons } = require('./comparisons');
 
@@ -51,9 +52,9 @@ async function refresh(force = false) {
   if (!force && snapshot && Date.now() - refreshedAt < 30000) return snapshot;
   if (refreshPromise) return refreshPromise;
   refreshPromise = collect().then((data) => {
-    snapshot = data;
+    snapshot = syncDevices(data);
     refreshedAt = Date.now();
-    return data;
+    return snapshot;
   }).finally(() => { refreshPromise = null; });
   return refreshPromise;
 }

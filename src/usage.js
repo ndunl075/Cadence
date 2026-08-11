@@ -170,7 +170,15 @@ async function parseCodexFile(file, days, hours, limits) {
     const info = entry.payload.info;
     if (!info) return;
     let usage;
-    if (info.total_token_usage) {
+    // Prefer the per-turn delta Codex already computed. Diffing the running
+    // total matches it on a clean file, but a resumed session that resets the
+    // cumulative counter would under-count until the total climbs past the old
+    // watermark — last_token_usage does not have that footgun.
+    if (info.last_token_usage) {
+      usage = tokenUsage(info.last_token_usage, { inputIncludesCache: true });
+      if (info.total_token_usage) previousTotal = tokenUsage(info.total_token_usage, { inputIncludesCache: true });
+      if (!usage.tokens) return;
+    } else if (info.total_token_usage) {
       const current = tokenUsage(info.total_token_usage, { inputIncludesCache: true });
       usage = blankUsage();
       for (const key of ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning', 'signal', 'tokens']) {
@@ -178,9 +186,6 @@ async function parseCodexFile(file, days, hours, limits) {
       }
       usage.messages = usage.tokens > 0 ? 1 : 0;
       previousTotal = current;
-      if (!usage.tokens) return;
-    } else if (info.last_token_usage) {
-      usage = tokenUsage(info.last_token_usage, { inputIncludesCache: true });
       if (!usage.tokens) return;
     } else return;
     add(ensureDay(days, day).codex, usage);
@@ -223,17 +228,20 @@ function noteCodexLimits(limits, block, timestamp) {
 
 /**
  * Cursor keeps no transcript files. Its chat history lives in a VS Code style
- * SQLite store, where each assistant turn is a row in `cursorDiskKV` keyed
- * `bubbleId:<chat>:<turn>`, holding a JSON blob with `tokenCount` and
- * `createdAt`. Rows whose count is zero are the user's own turns and the
- * bookkeeping rows around them, so the query drops them at the database rather
- * than parsing tens of thousands of blobs to find the ones that matter.
+ * SQLite store. Older builds wrote real per-bubble `tokenCount` values; current
+ * builds leave them at `{0,0}` and only keep a conversation-level context meter
+ * on `composerData` (`promptTokenBreakdown.totalUsedTokens` / `contextTokensUsed`).
+ * When the meter is all we have, Cadence credits it once per chat and estimates
+ * assistant output from visible text (`ceil(chars / 4)`), same approach other
+ * local Cursor trackers use. Explicit non-zero bubble counts still win.
  */
-const CURSOR_QUERY = `
+const CURSOR_BUBBLE_QUERY = `
   SELECT key, value FROM cursorDiskKV
   WHERE key LIKE 'bubbleId:%'
-    AND value LIKE '%"tokenCount":%'
-    AND value NOT LIKE '%"tokenCount":{"inputTokens":0,"outputTokens":0}%'
+`;
+const CURSOR_COMPOSER_QUERY = `
+  SELECT key, value FROM cursorDiskKV
+  WHERE key LIKE 'composerData:%'
 `;
 
 let sqliteModule;
@@ -274,35 +282,71 @@ function fileSignature(file) {
   return `${stamp(file)}|${stamp(`${file}-wal`)}`;
 }
 
+function estimateTokens(text) {
+  const length = String(text || '').length;
+  return length ? Math.ceil(length / 4) : 0;
+}
+
+function cursorTimestamp(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value).toISOString();
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.valueOf())) return parsed.toISOString();
+  }
+  return null;
+}
+
 /**
- * Read a store into flat per-turn records. Kept synchronous: the warning patch
- * above is process-wide, so nothing else may run while it is installed.
+ * Read a store into bubbles + composer meters. Kept synchronous: the warning
+ * patch above is process-wide, so nothing else may run while it is installed.
  */
 function readCursorStore(file) {
   const signature = fileSignature(file);
   const cached = cursorCache.get(file);
   if (cached && cached.signature === signature) return cached.records;
 
-  const records = [];
+  const records = { bubbles: [], composers: [] };
   const runtime = sqlite();
   if (runtime) {
     let db = null;
     try {
       db = new runtime.DatabaseSync(file, { readOnly: true });
-      for (const row of db.prepare(CURSOR_QUERY).all()) {
-        const text = String(row.value);
-        const counts = /"tokenCount":\{"inputTokens":(\d+),"outputTokens":(\d+)\}/.exec(text);
-        const created = /"createdAt":"([^"]+)"/.exec(text);
-        if (!counts || !created) continue;
-        records.push({
-          // usageUuid is the server's id for the turn, so the same turn seen in
-          // two stores (a second Cursor install, a restored profile) counts once.
-          id: /"usageUuid":"([^"]+)"/.exec(text)?.[1] || String(row.key),
-          chat: String(row.key).split(':')[1] || '',
-          timestamp: created[1],
-          input: Number(counts[1]),
-          output: Number(counts[2]),
+      for (const row of db.prepare(CURSOR_BUBBLE_QUERY).all()) {
+        let value;
+        try { value = JSON.parse(String(row.value)); } catch { continue; }
+        const key = String(row.key);
+        const parts = key.split(':');
+        const chat = parts[1] || '';
+        const bubbleId = parts.slice(2).join(':') || key;
+        const tokenCount = value?.tokenCount && typeof value.tokenCount === 'object' ? value.tokenCount : {};
+        const input = number(tokenCount.inputTokens ?? tokenCount.input_tokens);
+        const output = number(tokenCount.outputTokens ?? tokenCount.output_tokens);
+        const timestamp = cursorTimestamp(value?.createdAt);
+        if (!timestamp) continue;
+        records.bubbles.push({
+          id: typeof value.usageUuid === 'string' && value.usageUuid ? value.usageUuid : key,
+          bubbleId,
+          chat,
+          type: number(value?.type),
+          timestamp,
+          input,
+          output,
+          exact: input > 0 || output > 0,
+          textTokens: estimateTokens(value?.text),
         });
+      }
+      for (const row of db.prepare(CURSOR_COMPOSER_QUERY).all()) {
+        let value;
+        try { value = JSON.parse(String(row.value)); } catch { continue; }
+        const key = String(row.key);
+        const id = key.slice('composerData:'.length) || (typeof value?.composerId === 'string' ? value.composerId : '');
+        if (!id) continue;
+        const breakdown = number(value?.promptTokenBreakdown?.totalUsedTokens);
+        const context = number(value?.contextTokensUsed);
+        const input = breakdown || context;
+        const timestamp = cursorTimestamp(value?.lastUpdatedAt) || cursorTimestamp(value?.createdAt);
+        if (!input || !timestamp) continue;
+        records.composers.push({ id, timestamp, input });
       }
     } catch {
       // A store locked by a running Cursor, or one written by a newer schema,
@@ -316,30 +360,72 @@ function readCursorStore(file) {
 }
 
 /**
- * Cursor reports no cache breakdown at all — just input and output — and its
- * input is the whole prompt for the turn, context included. There is nothing to
- * subtract, so unlike Codex it cannot be put on the same cache-free footing as
- * Claude, and a Cursor day reads high against a Claude day. Counted as
- * reported, and said plainly in the README rather than silently scaled.
+ * Prefer exact bubble totals when Cursor still writes them. Otherwise credit the
+ * conversation context meter once and estimate assistant output from text so a
+ * modern install is not a blank Cursor lane.
  */
 function parseCursorStore(file, days, seen, chats, hours) {
+  const { bubbles, composers } = readCursorStore(file);
+  const exactChats = new Set();
   const chatDays = new Set();
-  for (const record of readCursorStore(file)) {
-    if (seen.has(record.id)) continue;
-    seen.add(record.id);
-    if (hours) addHour(hours, record.timestamp, 'cursor', record.input + record.output);
-    const day = dateKey(record.timestamp);
-    if (!day) continue;
+
+  for (const bubble of bubbles) {
+    if (!bubble.exact) continue;
+    exactChats.add(bubble.chat);
+    if (seen.has(bubble.id)) continue;
+    seen.add(bubble.id);
     const usage = blankUsage();
-    usage.input = record.input;
-    usage.output = record.output;
-    usage.signal = record.input + record.output;
+    usage.input = bubble.input;
+    usage.output = bubble.output;
+    usage.signal = bubble.input + bubble.output;
     usage.tokens = usage.signal;
     usage.messages = 1;
+    const day = dateKey(bubble.timestamp);
+    if (!day) continue;
     add(ensureDay(days, day).cursor, usage);
-    chats.add(record.chat);
-    chatDays.add(`${day}:${record.chat}`);
+    if (hours) addHour(hours, bubble.timestamp, 'cursor', usage.signal);
+    chats.add(bubble.chat);
+    chatDays.add(`${day}:${bubble.chat}`);
   }
+
+  for (const bubble of bubbles) {
+    if (exactChats.has(bubble.chat)) continue;
+    // User turns are type 1; 0/2 are assistant / tool-former variants.
+    if (bubble.type === 1 || !bubble.textTokens) continue;
+    const id = `cursor-text:${bubble.chat}:${bubble.bubbleId}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const usage = blankUsage();
+    usage.output = bubble.textTokens;
+    usage.signal = bubble.textTokens;
+    usage.tokens = bubble.textTokens;
+    usage.messages = 1;
+    const day = dateKey(bubble.timestamp);
+    if (!day) continue;
+    add(ensureDay(days, day).cursor, usage);
+    if (hours) addHour(hours, bubble.timestamp, 'cursor', usage.signal);
+    chats.add(bubble.chat);
+    chatDays.add(`${day}:${bubble.chat}`);
+  }
+
+  for (const composer of composers) {
+    if (exactChats.has(composer.id)) continue;
+    const id = `cursor-composer-input:${composer.id}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const usage = blankUsage();
+    usage.input = composer.input;
+    usage.signal = composer.input;
+    usage.tokens = composer.input;
+    usage.messages = 0;
+    const day = dateKey(composer.timestamp);
+    if (!day) continue;
+    add(ensureDay(days, day).cursor, usage);
+    if (hours) addHour(hours, composer.timestamp, 'cursor', usage.signal);
+    chats.add(composer.id);
+    chatDays.add(`${day}:${composer.id}`);
+  }
+
   for (const entry of chatDays) ensureDay(days, entry.slice(0, 10)).cursor.sessions += 1;
 }
 

@@ -118,6 +118,11 @@
         </div>
 
         <div class="field">
+          <div class="field-text"><b>Compact view</b><small>Graph, agents, and comparisons only.</small></div>
+          <button class="switch" role="switch" data-setting="compactView" aria-checked="false" aria-label="Compact view"><i></i></button>
+        </div>
+
+        <div class="field">
           <div class="field-text"><b>Usage bars</b><small>Last 5 hours and last 7 days, per agent.</small></div>
           <div class="bar-switches">
             <button class="switch" role="switch" data-setting="barClaude" aria-checked="false" aria-label="Claude usage bar"><i></i></button>
@@ -143,11 +148,26 @@
           <div class="field-text"><b>Cycle comparisons</b><small>Rotate the reference line automatically.</small></div>
           <button class="switch" role="switch" data-setting="rotateComparisons" aria-checked="true" aria-label="Cycle comparisons"><i></i></button>
         </div>
+
+        <div class="field field-stack">
+          <div class="field-row">
+            <div class="field-text">
+              <b>Sync across devices</b>
+              <small>Share daily totals through a folder in OneDrive, Dropbox, iCloud, or git. Aggregates only — no prompts.</small>
+            </div>
+            <button class="switch" role="switch" data-setting="syncEnabled" aria-checked="false" aria-label="Sync across devices"><i></i></button>
+          </div>
+          <div class="sync-path" id="sync-path" hidden>
+            <code id="sync-dir">No folder chosen</code>
+            <button type="button" id="sync-pick" class="linkish">CHOOSE FOLDER</button>
+          </div>
+          <p class="sync-meta" id="sync-meta" hidden></p>
+        </div>
       </div>
 
       <footer class="sheet-foot">
         <span id="settings-version">CADENCE</span>
-        <span>SAVED ON THIS MACHINE</span>
+        <span id="settings-locus">SAVED ON THIS MACHINE</span>
       </footer>
     </section>
 

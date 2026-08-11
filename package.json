@@ -16,7 +16,7 @@
     "export": "node src/server.js --export ./out",
     "test": "node --test",
     "build:icon": "node scripts/build-icon.mjs",
-    "build:exe": "npm run build:icon && electron-builder --win nsis zip"
+    "build:exe": "npm run build:icon && electron-builder --win nsis zip --publish never"
   },
   "build": {
     "appId": "dev.cadence.widget",

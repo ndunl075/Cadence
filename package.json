@@ -1,6 +1,6 @@
 {
   "name": "cadence-ai",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A local-first desktop widget and CLI charting your Claude Code, Codex and Cursor rhythm.",
   "license": "MIT",
   "private": true,
@@ -60,7 +60,7 @@
       "uninstallDisplayName": "Cadence",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
-      "artifactName": "cadence-setup.exe",
+      "artifactName": "Cadence-Installer.exe",
       "include": "installer.nsh"
     }
   },

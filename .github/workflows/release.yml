@@ -29,9 +29,12 @@ jobs:
       - run: npm run build:exe
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          # Cadence Installer.exe upgrades an existing install in place.
+          name: Cadence Installer ${{ github.ref_name }}
+          # Cadence-Installer.exe upgrades an existing install in place.
           # The zip is the same app as a plain folder for CLI use.
+          # Use a hyphenated name: spaces in NSIS artifact names get sanitized
+          # (became Cadence.Installer.exe) and break exact-path uploads.
           files: |
-            dist/Cadence*.exe
+            dist/Cadence-Installer.exe
             dist/cadence-win-x64.zip
           generate_release_notes: true

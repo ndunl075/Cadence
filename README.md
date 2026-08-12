@@ -4,9 +4,9 @@ Your AI coding rhythm, on your desktop. Cadence is a small always-on-top widget 
 
 ## Download for Windows
 
-[**Download Cadence Installer for Windows (x64)**](https://github.com/ndunl075/Cadence/releases/latest/download/Cadence-Installer.exe)
+[**Download Cadence Installer for Windows (x64)**](https://github.com/ndunl075/Cadence/releases/latest/download/Cadence%20Installer.exe)
 
-Download `Cadence-Installer.exe` and run it. The installer puts Cadence in your
+Download `Cadence Installer.exe` and run it. The installer puts Cadence in your
 user programs folder, adds Start Menu / desktop shortcuts, and **updates an
 existing install in place** if Cadence is already on the machine — you do not
 end up with multiple copies. The widget tucks into the top-left corner of your
@@ -333,7 +333,7 @@ both automatically:
 
 | Artifact | What it is |
 | --- | --- |
-| `dist/Cadence-Installer.exe` | NSIS installer. Detects an existing Cadence install and upgrades it in place |
+| `dist/Cadence Installer.exe` | NSIS installer. Detects an existing Cadence install and upgrades it in place |
 | `dist/cadence-win-x64.zip` | The same app as a plain folder. `Cadence.exe graph` behaves like any other console program |
 
 ## How it works

@@ -32,6 +32,6 @@ jobs:
           # Cadence Installer.exe upgrades an existing install in place.
           # The zip is the same app as a plain folder for CLI use.
           files: |
-            "dist/Cadence Installer.exe"
+            dist/Cadence*.exe
             dist/cadence-win-x64.zip
           generate_release_notes: true
